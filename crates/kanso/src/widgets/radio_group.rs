@@ -145,24 +145,27 @@ pub fn segmented<T: PartialEq + Clone>(
     selected: &mut T,
     options: &[(T, &str)],
 ) -> bool {
-    super::control::scope(ui, |ui| {
-        ui.horizontal(|ui| {
-            // Butt the segments together so they read as one control; the
-            // shared control border (applied by `control::scope`) hugs each
-            // segment and the active one fills with the theme selection.
-            ui.spacing_mut().item_spacing.x = 0.0;
-            let mut changed = false;
-            for (value, label) in options {
-                let is_selected = *selected == *value;
-                if ui.selectable_label(is_selected, *label).clicked() && !is_selected {
-                    *selected = value.clone();
-                    changed = true;
-                }
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        // Each segment is a real kanso button so it gets the same
+        // constant-geometry control treatment as every other button: the
+        // selected one is filled with the selection teal (like the primary
+        // button), the rest are neutral with the matched control border.
+        // Nothing grows on hover.
+        for (value, label) in options {
+            let is_selected = *selected == *value;
+            let response = if is_selected {
+                super::primary_button(ui, *label)
+            } else {
+                super::secondary_button(ui, *label)
+            };
+            if response.clicked() && !is_selected {
+                *selected = value.clone();
+                changed = true;
             }
-            changed
-        })
-        .inner
-    })
+        }
+    });
+    changed
 }
 
 /// One classic radio row: paints an [`egui::RadioButton`] for `value`,

@@ -61,7 +61,10 @@ impl Severity {
     /// cohort's bundled proportional font.
     pub fn icon(self) -> &'static str {
         match self {
-            Severity::Info => "ⓘ",
+            // Emoji-range glyphs so egui's bundled emoji fallback covers
+            // them when AdwaitaSans doesn't (U+24D8 "ⓘ" is NOT emoji and
+            // rendered as tofu; U+2139 "ℹ" is).
+            Severity::Info => "ℹ",
             Severity::Warn => "⚠",
             Severity::Error => "⚠",
             Severity::Ok => "✓",

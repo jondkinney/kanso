@@ -341,24 +341,27 @@ impl eframe::App for Gallery {
         });
 
         egui::TopBottomPanel::bottom("gallery_footer")
-            .min_height(48.0)
+            .exact_height(56.0)
             .show(ctx, |ui| {
-                ui.add_space(8.0);
-                match widgets::dirty_footer(&self.settings)
-                    .revert_enabled(self.capturing)
-                    .show(ui)
-                {
-                    FooterAction::Save => {
-                        self.settings.mark_saved();
-                        self.status = "Saved.".to_string();
+                // horizontal_centered fills the panel height and centers its
+                // row vertically, so Save/Revert sit centered in the bar.
+                ui.horizontal_centered(|ui| {
+                    match widgets::dirty_footer(&self.settings)
+                        .revert_enabled(self.capturing)
+                        .show(ui)
+                    {
+                        FooterAction::Save => {
+                            self.settings.mark_saved();
+                            self.status = "Saved.".to_string();
+                        }
+                        FooterAction::Revert => {
+                            self.settings.revert();
+                            self.capturing = false;
+                            self.status = "Reverted.".to_string();
+                        }
+                        FooterAction::None => {}
                     }
-                    FooterAction::Revert => {
-                        self.settings.revert();
-                        self.capturing = false;
-                        self.status = "Reverted.".to_string();
-                    }
-                    FooterAction::None => {}
-                }
+                });
             });
 
         widgets::content(ctx, |ui| {
