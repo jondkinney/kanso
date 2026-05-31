@@ -312,6 +312,11 @@ impl Gallery {
                     ui.label("Config lives at");
                     widgets::code(ui, "~/.config/vernier.toml");
                 });
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    widgets::field_label(ui, "Default provider");
+                    widgets::info_icon(ui, "A circled-i marker with a tooltip — hover me.");
+                });
             }
             10 => {
                 widgets::section_header(ui, "Progress");
