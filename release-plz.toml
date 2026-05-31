@@ -1,0 +1,17 @@
+# release-plz — automated crates.io releases. https://release-plz.dev
+#
+# Single-crate library: the `kanso` crate owns the git tag, GitHub
+# Release, and changelog. Merging the release PR publishes to crates.io.
+
+[workspace]
+# Release only when the release PR is merged — not on every push.
+release_always = false
+
+[[package]]
+name = "kanso"
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
+git_release_enable = true
+git_release_name = "v{{ version }}"
+changelog_update = true
+changelog_path = "CHANGELOG.md"

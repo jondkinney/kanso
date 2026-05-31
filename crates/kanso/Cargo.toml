@@ -1,0 +1,18 @@
+[package]
+name = "kanso"
+description = "Shared egui design system — theme, fonts, and widgets for the desktop utility-app cohort (vernier, hyprcorrect, and future egui apps)."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "../../README.md"
+keywords = ["egui", "gui", "design-system", "widgets", "theme"]
+categories = ["gui"]
+
+[dependencies]
+egui.workspace = true
+
+[dev-dependencies]
+eframe.workspace = true
