@@ -29,12 +29,15 @@ pub fn setting<R>(ui: &mut Ui, content: impl FnOnce(&mut Ui) -> R) -> R {
     r
 }
 
-/// Single-line text input with consistent inner padding so fields don't
-/// collapse to ~16px tall.
+/// Single-line text input with consistent inner padding and a fixed
+/// [`metrics::CONTROL_HEIGHT`] so it lines up with the buttons beside it
+/// (rather than collapsing to ~16px). The border treatment comes from the
+/// theme (see [`crate::theme`]): color-matched at rest, visible on hover.
 pub fn padded_text_edit(ui: &mut Ui, text: &mut String) -> Response {
     ui.add(
         egui::TextEdit::singleline(text)
             .margin(egui::Margin::symmetric(8, 6))
+            .min_size(egui::vec2(0.0, metrics::CONTROL_HEIGHT))
             .desired_width(f32::INFINITY),
     )
 }

@@ -50,3 +50,19 @@ pub const WARN: Color32 = Color32::from_rgb(220, 160, 50);
 pub const INFO: Color32 = Color32::from_rgb(96, 165, 250);
 /// Active "capturing a chord" highlight (`rgb(50,90,140)`).
 pub const CAPTURE: Color32 = Color32::from_rgb(50, 90, 140);
+
+// --- Controls (inputs, neutral buttons, combos) ---
+//
+// The resting border is painted in `CONTROL_BG` — the same color as the
+// control's own fill — so it reads as borderless without changing the
+// control's geometry. On hover the border switches to `BORDER`, on
+// focus/press to `ACCENT`. Only the *color* changes; width stays 1px and
+// `expansion` stays 0, so controls never change height (see [`crate::theme`]).
+
+/// Resting fill of an input / neutral button (also the resting,
+/// color-matched border).
+pub const CONTROL_BG: Color32 = Color32::from_gray(38);
+/// Hovered fill of an input / neutral button.
+pub const CONTROL_BG_HOVER: Color32 = Color32::from_gray(46);
+/// Visible border color shown on hover.
+pub const BORDER: Color32 = Color32::from_gray(90);

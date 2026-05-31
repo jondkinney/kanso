@@ -1,16 +1,21 @@
 //! One-call theming.
 //!
 //! [`apply`] installs the bundled font plus the apps' shared text-style
-//! scale (heading 21 / body 14 / mono 13 / small 12), spacing, and
-//! button padding. Like the apps, it **rides egui's default dark
-//! `Visuals`** and only overrides text styles + spacing +
-//! `widgets.inactive.expansion` — so dropping it into vernier/hyprcorrect
-//! does not repaint any surface. This is exactly vernier's `apply_style`
-//! + `install_glyph_fonts`, lifted into one place.
+//! scale (heading 21 / body 14 / mono 13 / small 12), spacing, and a
+//! deliberate **control treatment** for inputs and neutral buttons:
+//!
+//! - one fixed [`metrics::CONTROL_HEIGHT`] so inputs and buttons line up;
+//! - a **constant-geometry border** — always 1px, color-matched to the
+//!   control's fill at rest (so it reads as borderless), switching to
+//!   [`palette::BORDER`] on hover and [`palette::ACCENT`] on press. Only
+//!   the *color* changes — never the width or `expansion` — so a control
+//!   never changes height next to its non-hovered neighbours.
+//!
+//! Everything else rides egui's default dark `Visuals`.
 
 use egui::Context;
 
-use crate::fonts;
+use crate::{fonts, metrics, palette};
 
 /// Theme configuration. [`Theme::default`] is the cohort look; tweak the
 /// type-scale fields or [`fonts::FontOptions`] before calling
@@ -25,6 +30,8 @@ pub struct Theme {
     pub mono: f32,
     /// Small / caption size.
     pub small: f32,
+    /// Accent for focus/press borders and selection.
+    pub accent: egui::Color32,
     /// Font installation options.
     pub fonts: fonts::FontOptions,
 }
@@ -36,6 +43,7 @@ impl Default for Theme {
             body: 14.0,
             mono: 13.0,
             small: 12.0,
+            accent: palette::ACCENT,
             fonts: fonts::FontOptions::default(),
         }
     }
@@ -65,15 +73,54 @@ impl Theme {
             spacing.item_spacing = egui::vec2(8.0, 8.0);
             spacing.button_padding = egui::vec2(12.0, 6.0);
             spacing.indent = 14.0;
-            spacing.interact_size = egui::vec2(40.0, 28.0);
+            spacing.interact_size = egui::vec2(40.0, metrics::CONTROL_HEIGHT);
             spacing.icon_width = 18.0;
             spacing.icon_spacing = 6.0;
 
-            // The one Visuals tweak the apps make: kill the 1px grow on
-            // hover so settings rows don't twitch.
-            style.visuals.widgets.inactive.expansion = 0.0;
+            apply_control_visuals(&mut style.visuals, self.accent);
         });
     }
+}
+
+/// Configure the input/button control treatment on top of egui's dark
+/// visuals: a constant-width border whose *color* (not size) tracks the
+/// interaction state, so controls never change height.
+fn apply_control_visuals(visuals: &mut egui::Visuals, accent: egui::Color32) {
+    let w = metrics::BORDER_WIDTH;
+    let radius = egui::CornerRadius::same(metrics::CONTROL_CORNER);
+    let stroke = |color| egui::Stroke::new(w, color);
+
+    // Text-edit fill. `selection` is left untouched so the sidebar nav
+    // (and the primary button, which derives from it) keep their color and
+    // the text-edit focus ring stays egui's selection stroke.
+    visuals.extreme_bg_color = palette::CONTROL_BG;
+
+    let widgets = &mut visuals.widgets;
+
+    // Rest: border color-matched to the fill → reads as borderless.
+    widgets.inactive.weak_bg_fill = palette::CONTROL_BG;
+    widgets.inactive.bg_fill = palette::CONTROL_BG;
+    widgets.inactive.bg_stroke = stroke(palette::CONTROL_BG);
+    widgets.inactive.corner_radius = radius;
+    widgets.inactive.expansion = 0.0;
+
+    // Hover: same geometry, the border simply gains a visible color.
+    widgets.hovered.weak_bg_fill = palette::CONTROL_BG_HOVER;
+    widgets.hovered.bg_fill = palette::CONTROL_BG_HOVER;
+    widgets.hovered.bg_stroke = stroke(palette::BORDER);
+    widgets.hovered.corner_radius = radius;
+    widgets.hovered.expansion = 0.0;
+
+    // Press / open: accent border.
+    widgets.active.weak_bg_fill = palette::CONTROL_BG_HOVER;
+    widgets.active.bg_fill = palette::CONTROL_BG_HOVER;
+    widgets.active.bg_stroke = stroke(accent);
+    widgets.active.corner_radius = radius;
+    widgets.active.expansion = 0.0;
+
+    widgets.open.bg_stroke = stroke(palette::BORDER);
+    widgets.open.corner_radius = radius;
+    widgets.open.expansion = 0.0;
 }
 
 /// Apply the default cohort theme. Equivalent to

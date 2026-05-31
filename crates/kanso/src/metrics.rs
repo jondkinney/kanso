@@ -21,8 +21,14 @@ pub const CAPTION_CODE_SIZE: f32 = 11.5;
 /// Line height used while laying out captions (gives pills room).
 pub const CAPTION_LINE_HEIGHT: f32 = 22.0;
 
-/// Minimum interactive control height.
+/// Minimum interactive control height — inputs and buttons share this so
+/// they line up and never change height on hover.
 pub const CONTROL_HEIGHT: f32 = 28.0;
+/// Border width for inputs / buttons. Constant across rest/hover/focus so
+/// only the *color* changes, never the geometry.
+pub const BORDER_WIDTH: f32 = 1.0;
+/// Corner radius for inputs / neutral buttons.
+pub const CONTROL_CORNER: u8 = 6;
 
 /// Corner radius for an inline code pill.
 pub const CODE_CORNER: f32 = 3.0;
