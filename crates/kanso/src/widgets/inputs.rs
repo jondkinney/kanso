@@ -4,13 +4,21 @@ use std::hash::Hash;
 
 use egui::{Response, Ui};
 
-/// Full-width single-line search/filter field with a hint.
+use crate::metrics;
+
+/// Full-width single-line search/filter field with a hint. Same padding
+/// and height as [`super::padded_text_edit`] so it lines up with the
+/// inputs around it, and the same scoped border treatment.
 pub fn search_field(ui: &mut Ui, text: &mut String, hint: &str) -> Response {
-    ui.add(
-        egui::TextEdit::singleline(text)
-            .hint_text(hint)
-            .desired_width(f32::INFINITY),
-    )
+    super::control::scope(ui, |ui| {
+        ui.add(
+            egui::TextEdit::singleline(text)
+                .hint_text(hint)
+                .margin(egui::Margin::symmetric(8, 6))
+                .min_size(egui::vec2(0.0, metrics::CONTROL_HEIGHT))
+                .desired_width(f32::INFINITY),
+        )
+    })
 }
 
 /// A labeled dropdown over a fixed set of `(value, label)` options.

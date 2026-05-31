@@ -32,6 +32,12 @@ pub const CONTROL_CORNER: u8 = 6;
 
 /// Corner radius for an inline code pill.
 pub const CODE_CORNER: f32 = 3.0;
+/// Monospace size inside a standalone [`crate::widgets::code`] pill.
+pub const CODE_SIZE: f32 = 12.5;
+/// Horizontal padding inside a standalone code pill.
+pub const CODE_PAD_X: f32 = 5.0;
+/// Vertical padding inside a standalone code pill.
+pub const CODE_PAD_Y: f32 = 2.0;
 /// Corner radius for cards / grouped surfaces.
 pub const CARD_CORNER: f32 = 10.0;
 /// Corner radius for chips / tokens.

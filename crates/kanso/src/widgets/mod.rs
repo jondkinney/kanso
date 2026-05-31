@@ -4,6 +4,7 @@ mod app_picker;
 mod buttons;
 mod caption;
 mod code;
+mod control;
 mod helpers;
 mod inputs;
 mod sidebar;
