@@ -70,6 +70,14 @@ impl Theme {
             spacing.interact_size = egui::vec2(40.0, metrics::CONTROL_HEIGHT);
             spacing.icon_width = 18.0;
             spacing.icon_spacing = 6.0;
+            // Solid, space-reserving scrollbar. egui's default *floating*
+            // bar overlays content, so full-width fields and combo-box drop
+            // buttons get clipped under the float lane; the solid bar
+            // reserves a lane (only the handle shows — track opacities 0).
+            spacing.scroll = egui::style::ScrollStyle::solid();
+            spacing.scroll.dormant_background_opacity = 0.0;
+            spacing.scroll.active_background_opacity = 0.0;
+            spacing.scroll.interact_background_opacity = 0.0;
 
             // One standard corner radius across every control and
             // container, and constant geometry (nothing grows on hover).
