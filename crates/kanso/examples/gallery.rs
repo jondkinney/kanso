@@ -90,6 +90,7 @@ const SECTIONS: &[&str] = &[
     "Pickers",
     "Apps",
     "Captions",
+    "Progress",
     "About",
 ];
 
@@ -311,6 +312,17 @@ impl Gallery {
                     ui.label("Config lives at");
                     widgets::code(ui, "~/.config/vernier.toml");
                 });
+            }
+            10 => {
+                widgets::section_header(ui, "Progress");
+                widgets::progress(ui, 0.42, "Downloading 6.7 / 16.0 GB");
+                ui.add_space(12.0);
+                widgets::ProgressBar::indeterminate()
+                    .text("Unzipping (~16 GB)…")
+                    .show(ui);
+                ui.add_space(16.0);
+                widgets::caption(ui, "A slim, label-less rail:");
+                widgets::ProgressBar::new(0.7).height(6.0).show(ui);
             }
             _ => {
                 let logo = self.logo.clone();

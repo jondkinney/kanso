@@ -56,6 +56,10 @@ pub const CARD_PAD_Y: i8 = 16;
 /// Corner radius for chips / tokens.
 pub const CHIP_CORNER: f32 = 4.0;
 
+/// Height of a [`crate::widgets::progress`] bar — tall enough to seat a
+/// centered overlay label, short enough to read as a bar not a button.
+pub const PROGRESS_HEIGHT: f32 = 22.0;
+
 // --- Shortcut keycap chips ([`crate::widgets::shortcut_chip`]) ---
 //
 // vernier sized glyphs at 17pt in a 14px box with a 6px gap; hyprcorrect
