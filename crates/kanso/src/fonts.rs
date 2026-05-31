@@ -1,13 +1,14 @@
 //! Font installation.
 //!
-//! Every app in the cohort bundled its own copy of
-//! `AdwaitaSans-Regular.ttf` and wired it into egui by hand. kanso
-//! bundles it once and installs it as the default **proportional** face,
-//! keeping egui's built-in monospace for `code` spans.
+//! Regular text uses **egui's standard font** — the cohort decided the
+//! default reads well for body copy. kanso bundles `AdwaitaSans-Regular.ttf`
+//! (once, for the whole cohort) and reserves it for the **modifier glyphs**:
+//! it builds the [`SHORTCUT_FAMILY`] used to render keyboard-shortcut chips
+//! — Adwaita's key glyphs (⌃ ⇧ ⌥ ⌘ …) plus the omarchy SUPER logo at
+//! [`OMARCHY_LOGO`], loaded at runtime from the user's font dir.
 //!
-//! Optionally it also builds the [`SHORTCUT_FAMILY`] used to render
-//! keyboard-shortcut chips: Adwaita's key glyphs plus the omarchy SUPER
-//! logo at [`OMARCHY_LOGO`], loaded at runtime from the user's font dir.
+//! ([`FontOptions::adwaita_sans`] can still make Adwaita the body font, but
+//! it's off by default.)
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -41,8 +42,10 @@ pub fn omarchy_available() -> bool {
 /// Options for [`install`].
 #[derive(Clone, Debug)]
 pub struct FontOptions {
-    /// Install the bundled Adwaita Sans as the preferred proportional
-    /// font (egui's defaults remain as fallback). Default: `true`.
+    /// Install the bundled Adwaita Sans as the *body* (proportional) font.
+    /// Default: `false` — the cohort uses egui's standard font for regular
+    /// text and reserves Adwaita Sans for the modifier glyphs in
+    /// [`SHORTCUT_FAMILY`]. Set `true` only if you want Adwaita body text.
     pub adwaita_sans: bool,
     /// Build [`SHORTCUT_FAMILY`] for keyboard-shortcut chips (loads
     /// `omarchy.ttf` if present). Default: `false`.
@@ -57,7 +60,7 @@ pub struct FontOptions {
 impl Default for FontOptions {
     fn default() -> Self {
         Self {
-            adwaita_sans: true,
+            adwaita_sans: false,
             shortcut_family: false,
             omarchy_last: true,
         }

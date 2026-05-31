@@ -8,8 +8,9 @@
 //! - [`theme`] — one call ([`theme::apply`]) installs the bundled font,
 //!   text-style scale, spacing, and a dark palette so every app looks
 //!   the same out of the box.
-//! - [`fonts`] — bundles Adwaita Sans and wires it in as the default
-//!   proportional face (the apps each `include_bytes!`'d their own copy).
+//! - [`fonts`] — bundles Adwaita Sans (the apps each `include_bytes!`'d
+//!   their own copy) and reserves it for the shortcut/modifier glyphs;
+//!   body text uses egui's standard font.
 //! - [`palette`] — named colors, replacing scattered `Color32::from_gray`
 //!   literals.
 //! - [`widgets`] — the recurring building blocks: a left-sidebar / right-
