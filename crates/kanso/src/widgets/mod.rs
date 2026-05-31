@@ -1,18 +1,42 @@
 //! The recurring building blocks every settings window re-implemented.
 
+mod about_pane;
 mod app_picker;
+mod banner;
 mod buttons;
 mod caption;
+mod card;
 mod code;
+mod color_picker;
 mod control;
+mod dirty_footer;
 mod helpers;
 mod inputs;
+mod link;
+mod number_stepper;
+mod password_field;
+mod radio_group;
+mod shortcut_chip;
 mod sidebar;
+mod slider;
+mod toggle;
 
+pub use about_pane::{AboutInfo, about_pane};
 pub use app_picker::{AppEntry, app_picker};
+pub use banner::{Severity, banner, banner_action};
 pub use buttons::{primary_button, secondary_button};
 pub use caption::caption;
+pub use card::card;
 pub use code::{code, code_span};
+pub use color_picker::{color_picker, color_picker_opaque};
+pub use dirty_footer::{Dirty, DirtyFooter, FooterAction, dirty_footer};
 pub use helpers::{field_label, padded_text_edit, section_header, setting};
 pub use inputs::{dropdown, search_field};
+pub use link::{external_link, link, link_to};
+pub use number_stepper::{NumberStepper, number_stepper};
+pub use password_field::{password_field, password_field_revealable};
+pub use radio_group::{radio_group, radio_group_horizontal, segmented};
+pub use shortcut_chip::{shortcut_capture_chip, shortcut_chip, shortcut_chip_str, token_glyph};
 pub use sidebar::{app_shell, content, nav_item, nav_list, sidebar, sidebar_header};
+pub use slider::{Slider, slider};
+pub use toggle::{labeled_toggle, toggle};

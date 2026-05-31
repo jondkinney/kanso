@@ -48,5 +48,68 @@ pub const CODE_PAD_X: f32 = 5.0;
 pub const CODE_PAD_Y: f32 = 2.0;
 /// Corner radius for cards / grouped surfaces.
 pub const CARD_CORNER: f32 = 10.0;
+/// Horizontal inner padding inside a [`crate::widgets::card`].
+pub const CARD_PAD_X: i8 = 18;
+/// Vertical inner padding inside a [`crate::widgets::card`].
+pub const CARD_PAD_Y: i8 = 16;
 /// Corner radius for chips / tokens.
 pub const CHIP_CORNER: f32 = 4.0;
+
+// --- Shortcut keycap chips ([`crate::widgets::shortcut_chip`]) ---
+//
+// vernier sized glyphs at 17pt in a 14px box with a 6px gap; hyprcorrect
+// drew one 280×32 chip at 17pt. Reconciled: per-segment rounded keycaps
+// sized to the glyph, sharing the control height for the interactive
+// capture chip so it lines up with the inputs beside it.
+
+/// Glyph point size on a shortcut keycap (vernier's `CHIP_LETTER_PT`,
+/// sized to match the omarchy logo's cap height).
+pub const SHORTCUT_GLYPH_SIZE: f32 = 17.0;
+/// Height of an individual rounded keycap.
+pub const SHORTCUT_KEYCAP_HEIGHT: f32 = 22.0;
+/// Horizontal padding inside a keycap, each side of the glyph.
+pub const SHORTCUT_KEYCAP_PAD_X: f32 = 7.0;
+/// Floor on a keycap's width so narrow single glyphs (`⌘`, `+`) still
+/// read as a square-ish cap rather than a sliver.
+pub const SHORTCUT_KEYCAP_MIN_WIDTH: f32 = 22.0;
+/// Gap between adjacent keycaps in a chord (vernier's `CHIP_GAP`).
+pub const SHORTCUT_KEYCAP_GAP: f32 = 6.0;
+/// Fixed width of the interactive capture chip (between vernier's 200px
+/// and hyprcorrect's 280px row chip).
+pub const SHORTCUT_CHIP_WIDTH: f32 = 240.0;
+
+// --- Severity banner ([`crate::widgets::banner`]) ---
+//
+// vernier's notice frames both used `corner_radius(8)` + a symmetric inner
+// margin (`(20, 12)` for the top-panel banner, `(12, 10)` for the inline
+// "static bind" one) with a strong ~13.5 title over a ~12 body; hyprcorrect's
+// review cards used the same `8` rounding and a `(14, 12)` margin. These
+// reconcile the repeated literals into one banner rhythm.
+
+/// Corner radius for a severity banner strip.
+pub const BANNER_CORNER: u8 = 8;
+/// Horizontal inner padding inside a banner strip.
+pub const BANNER_PAD_X: i8 = 14;
+/// Vertical inner padding inside a banner strip.
+pub const BANNER_PAD_Y: i8 = 12;
+/// Banner title text size.
+pub const BANNER_TITLE_SIZE: f32 = 13.5;
+/// Banner body text size.
+pub const BANNER_BODY_SIZE: f32 = 12.0;
+/// Gap between a banner's title and its body.
+pub const BANNER_TITLE_GAP: f32 = 4.0;
+/// Gap between a banner's body and its action button.
+pub const BANNER_ACTION_GAP: f32 = 8.0;
+/// Alpha the severity color is laid over [`crate::palette::CARD`] at to
+/// derive a banner's faint tinted fill.
+pub const BANNER_FILL_ALPHA: f32 = 0.16;
+/// Alpha the severity color is laid over [`crate::palette::CARD`] at to
+/// derive a banner's clearer edge stroke.
+pub const BANNER_STROKE_ALPHA: f32 = 0.55;
+
+/// Large hero logo size in the About pane ([`crate::widgets::about_pane`]).
+/// Vernier's About screen rendered its icon at this size.
+pub const ABOUT_LOGO_SIZE: f32 = 112.0;
+/// App-name size in the About hero ([`crate::widgets::about_pane`]).
+/// Vernier set the name at 28pt strong.
+pub const ABOUT_NAME_SIZE: f32 = 28.0;
