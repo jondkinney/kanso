@@ -12,7 +12,7 @@
 
 use egui::Context;
 
-use crate::{fonts, metrics};
+use crate::{fonts, metrics, palette};
 
 /// Theme configuration. [`Theme::default`] is the cohort look; tweak the
 /// type-scale fields or [`fonts::FontOptions`] before calling
@@ -95,4 +95,57 @@ impl Theme {
 /// `Theme::default().apply(ctx)`.
 pub fn apply(ctx: &Context) {
     Theme::default().apply(ctx);
+}
+
+/// Apply kanso's input/button **control treatment** to `visuals`: a
+/// constant 1px border whose *color* tracks state — matched to the fill at
+/// rest (so it reads as borderless), [`palette::BORDER`] on hover,
+/// [`palette::ACCENT`] on press — plus the control fills, the standard
+/// [`metrics::RADIUS`], and `expansion = 0` so a control never changes
+/// height.
+///
+/// kanso's own inputs/buttons apply this in a *local scope* so it doesn't
+/// bleed onto dropdown items or nav rows. An app with many **direct** egui
+/// widgets can instead apply it **globally** in its startup style, so every
+/// `egui::Button` / `TextEdit` / `ComboBox` picks up the kanso look without
+/// being routed through a kanso helper:
+///
+/// ```no_run
+/// # fn demo(ctx: &kanso::egui::Context) {
+/// kanso::theme::apply(ctx);
+/// ctx.style_mut(|s| kanso::theme::control_visuals(&mut s.visuals));
+/// # }
+/// ```
+pub fn control_visuals(visuals: &mut egui::Visuals) {
+    let radius = egui::CornerRadius::same(metrics::RADIUS);
+    let stroke = |c| egui::Stroke::new(metrics::BORDER_WIDTH, c);
+    visuals.extreme_bg_color = palette::CONTROL_BG; // text-edit fill
+
+    let w = &mut visuals.widgets;
+    w.noninteractive.corner_radius = radius;
+    w.noninteractive.expansion = 0.0;
+
+    w.inactive.weak_bg_fill = palette::CONTROL_BG;
+    w.inactive.bg_fill = palette::CONTROL_BG;
+    w.inactive.bg_stroke = stroke(palette::CONTROL_BG); // matched → invisible
+    w.inactive.corner_radius = radius;
+    w.inactive.expansion = 0.0;
+
+    w.hovered.weak_bg_fill = palette::CONTROL_BG_HOVER;
+    w.hovered.bg_fill = palette::CONTROL_BG_HOVER;
+    w.hovered.bg_stroke = stroke(palette::BORDER); // color change only
+    w.hovered.corner_radius = radius;
+    w.hovered.expansion = 0.0;
+
+    w.active.weak_bg_fill = palette::CONTROL_BG_HOVER;
+    w.active.bg_fill = palette::CONTROL_BG_HOVER;
+    w.active.bg_stroke = stroke(palette::ACCENT);
+    w.active.corner_radius = radius;
+    w.active.expansion = 0.0;
+
+    w.open.weak_bg_fill = palette::CONTROL_BG_HOVER;
+    w.open.bg_fill = palette::CONTROL_BG_HOVER;
+    w.open.bg_stroke = stroke(palette::BORDER);
+    w.open.corner_radius = radius;
+    w.open.expansion = 0.0;
 }
