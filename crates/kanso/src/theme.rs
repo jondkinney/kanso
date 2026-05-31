@@ -47,55 +47,60 @@ impl Theme {
     /// Install fonts + styles into the context. Call once at startup.
     pub fn apply(&self, ctx: &Context) {
         fonts::install(ctx, &self.fonts);
-        ctx.style_mut(|style| {
-            use egui::FontFamily::{Monospace, Proportional};
-            use egui::TextStyle::{Body, Button, Heading, Small};
+        ctx.style_mut(|style| self.apply_styles_to(style));
+    }
 
-            style.text_styles = [
-                (Heading, egui::FontId::new(self.heading, Proportional)),
-                (Body, egui::FontId::new(self.body, Proportional)),
-                (
-                    egui::TextStyle::Monospace,
-                    egui::FontId::new(self.mono, Monospace),
-                ),
-                (Button, egui::FontId::new(self.body, Proportional)),
-                (Small, egui::FontId::new(self.small, Proportional)),
-            ]
-            .into();
+    /// Apply the type scale, spacing, solid scrollbar, and corner radius to
+    /// a `Style` — everything except fonts. Shared by [`Theme::apply`] and
+    /// the font-free [`apply_styles`].
+    fn apply_styles_to(&self, style: &mut egui::Style) {
+        use egui::FontFamily::{Monospace, Proportional};
+        use egui::TextStyle::{Body, Button, Heading, Small};
 
-            let spacing = &mut style.spacing;
-            spacing.item_spacing = egui::vec2(8.0, 8.0);
-            spacing.button_padding = egui::vec2(12.0, 6.0);
-            spacing.indent = 14.0;
-            spacing.interact_size = egui::vec2(40.0, metrics::CONTROL_HEIGHT);
-            spacing.icon_width = 18.0;
-            spacing.icon_spacing = 6.0;
-            // Solid, space-reserving scrollbar. egui's default *floating*
-            // bar overlays content, so full-width fields and combo-box drop
-            // buttons get clipped under the float lane; the solid bar
-            // reserves a lane (only the handle shows — track opacities 0).
-            spacing.scroll = egui::style::ScrollStyle::solid();
-            spacing.scroll.dormant_background_opacity = 0.0;
-            spacing.scroll.active_background_opacity = 0.0;
-            spacing.scroll.interact_background_opacity = 0.0;
+        style.text_styles = [
+            (Heading, egui::FontId::new(self.heading, Proportional)),
+            (Body, egui::FontId::new(self.body, Proportional)),
+            (
+                egui::TextStyle::Monospace,
+                egui::FontId::new(self.mono, Monospace),
+            ),
+            (Button, egui::FontId::new(self.body, Proportional)),
+            (Small, egui::FontId::new(self.small, Proportional)),
+        ]
+        .into();
 
-            // One standard corner radius across every control and
-            // container, and constant geometry (nothing grows on hover).
-            let radius = egui::CornerRadius::same(metrics::RADIUS);
-            let v = &mut style.visuals;
-            v.window_corner_radius = radius;
-            v.menu_corner_radius = radius;
-            for state in [
-                &mut v.widgets.noninteractive,
-                &mut v.widgets.inactive,
-                &mut v.widgets.hovered,
-                &mut v.widgets.active,
-                &mut v.widgets.open,
-            ] {
-                state.corner_radius = radius;
-                state.expansion = 0.0;
-            }
-        });
+        let spacing = &mut style.spacing;
+        spacing.item_spacing = egui::vec2(8.0, 8.0);
+        spacing.button_padding = egui::vec2(12.0, 6.0);
+        spacing.indent = 14.0;
+        spacing.interact_size = egui::vec2(40.0, metrics::CONTROL_HEIGHT);
+        spacing.icon_width = 18.0;
+        spacing.icon_spacing = 6.0;
+        // Solid, space-reserving scrollbar. egui's default *floating* bar
+        // overlays content, so full-width fields and combo-box drop buttons
+        // get clipped under the float lane; the solid bar reserves a lane
+        // (only the handle shows — track opacities 0).
+        spacing.scroll = egui::style::ScrollStyle::solid();
+        spacing.scroll.dormant_background_opacity = 0.0;
+        spacing.scroll.active_background_opacity = 0.0;
+        spacing.scroll.interact_background_opacity = 0.0;
+
+        // One standard corner radius across every control and container, and
+        // constant geometry (nothing grows on hover).
+        let radius = egui::CornerRadius::same(metrics::RADIUS);
+        let v = &mut style.visuals;
+        v.window_corner_radius = radius;
+        v.menu_corner_radius = radius;
+        for state in [
+            &mut v.widgets.noninteractive,
+            &mut v.widgets.inactive,
+            &mut v.widgets.hovered,
+            &mut v.widgets.active,
+            &mut v.widgets.open,
+        ] {
+            state.corner_radius = radius;
+            state.expansion = 0.0;
+        }
     }
 }
 
@@ -103,6 +108,23 @@ impl Theme {
 /// `Theme::default().apply(ctx)`.
 pub fn apply(ctx: &Context) {
     Theme::default().apply(ctx);
+}
+
+/// Apply kanso's styles — type scale, spacing, the solid scrollbar, and
+/// corner radius — **without** touching fonts. Safe to call every frame (no
+/// font-atlas rebuild). Pair with [`control_visuals`] for the input border.
+///
+/// Use this when an app installs fonts once at startup (e.g. its own glyph
+/// family shared with another window) but re-applies styles per frame:
+///
+/// ```no_run
+/// # fn update(ctx: &kanso::egui::Context) {
+/// kanso::theme::apply_styles(ctx);
+/// ctx.style_mut(|s| kanso::theme::control_visuals(&mut s.visuals));
+/// # }
+/// ```
+pub fn apply_styles(ctx: &Context) {
+    ctx.style_mut(|style| Theme::default().apply_styles_to(style));
 }
 
 /// Apply kanso's input/button **control treatment** to `visuals`: a
