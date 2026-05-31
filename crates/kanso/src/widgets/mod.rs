@@ -15,4 +15,4 @@ pub use caption::caption;
 pub use code::{code, code_span};
 pub use helpers::{field_label, padded_text_edit, section_header, setting};
 pub use inputs::{dropdown, search_field};
-pub use sidebar::{app_shell, content, nav_item, nav_list, sidebar};
+pub use sidebar::{app_shell, content, nav_item, nav_list, sidebar, sidebar_header};

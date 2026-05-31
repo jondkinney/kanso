@@ -6,6 +6,10 @@
 pub const SIDEBAR_WIDTH: f32 = 200.0;
 /// Height of a sidebar [`crate::widgets::nav_item`] row.
 pub const NAV_ROW_HEIGHT: f32 = 32.0;
+/// Logo size in the sidebar header ([`crate::widgets::sidebar_header`]).
+pub const LOGO_SIZE: f32 = 24.0;
+/// Vertical padding above and below the sidebar header.
+pub const HEADER_PAD: f32 = 8.0;
 
 /// Vertical gap a section header leaves before its body.
 pub const SECTION_GAP: f32 = 14.0;

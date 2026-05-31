@@ -31,7 +31,13 @@ fn widgets_render_one_frame_without_panic() {
     let mut query = String::new();
 
     let _ = ctx.run(egui::RawInput::default(), |ctx| {
+        let logo = ctx.load_texture(
+            "smoke-logo",
+            egui::ColorImage::from_rgba_unmultiplied([2, 2], &[0u8; 16]),
+            egui::TextureOptions::LINEAR,
+        );
         widgets::sidebar(ctx, metrics::SIDEBAR_WIDTH, |ui| {
+            widgets::sidebar_header(ui, Some(egui::Image::new(&logo)), "kanso");
             widgets::nav_list(ui, &mut nav, &["A", "B", "C"]);
         });
         widgets::content(ctx, |ui| {

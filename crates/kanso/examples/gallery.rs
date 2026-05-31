@@ -45,6 +45,7 @@ struct Gallery {
     selected_app: Option<String>,
     app_query: String,
     mode: Mode,
+    logo: Option<egui::TextureHandle>,
 }
 
 impl Gallery {
@@ -61,6 +62,7 @@ impl Gallery {
             selected_app: None,
             app_query: String::new(),
             mode: Mode::Balanced,
+            logo: None,
         }
     }
 
@@ -141,12 +143,34 @@ fn captions_section(ui: &mut egui::Ui) {
     });
 }
 
+/// A throwaway placeholder logo (a filled teal disc) so the gallery can
+/// demo `sidebar_header` with an actual image. Real apps pass their own
+/// rendered icon texture.
+fn make_logo(ctx: &egui::Context) -> egui::TextureHandle {
+    let size = 48usize;
+    let teal = [0u8, 92, 128, 255];
+    let mut rgba = vec![0u8; size * size * 4];
+    let center = (size as f32 - 1.0) / 2.0;
+    let radius = size as f32 * 0.46;
+    for y in 0..size {
+        for x in 0..size {
+            let dx = x as f32 - center;
+            let dy = y as f32 - center;
+            if dx * dx + dy * dy <= radius * radius {
+                let i = (y * size + x) * 4;
+                rgba[i..i + 4].copy_from_slice(&teal);
+            }
+        }
+    }
+    let image = egui::ColorImage::from_rgba_unmultiplied([size, size], &rgba);
+    ctx.load_texture("kanso-demo-logo", image, egui::TextureOptions::LINEAR)
+}
+
 impl eframe::App for Gallery {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         widgets::sidebar(ctx, metrics::SIDEBAR_WIDTH, |ui| {
-            ui.add_space(8.0);
-            ui.heading("kanso");
-            ui.add_space(8.0);
+            let logo = self.logo.get_or_insert_with(|| make_logo(ui.ctx()));
+            widgets::sidebar_header(ui, Some(egui::Image::new(&*logo)), "kanso");
             widgets::nav_list(
                 ui,
                 &mut self.section,

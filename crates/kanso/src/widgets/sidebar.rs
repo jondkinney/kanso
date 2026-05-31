@@ -7,6 +7,32 @@
 
 use egui::{Context, Response, Ui};
 
+use crate::metrics;
+
+/// The sidebar's app-identity header — an optional logo to the left of the
+/// app name (heading style), with consistent padding. Put it at the very
+/// top of your [`sidebar`]. The app owns the logo *image* (its rendered
+/// icon texture); kanso owns the size, alignment, and spacing.
+///
+/// ```no_run
+/// # fn demo(ui: &mut kanso::egui::Ui, icon: &kanso::egui::TextureHandle) {
+/// use kanso::egui;
+/// kanso::widgets::sidebar_header(ui, Some(egui::Image::new(icon)), "Vernier");
+/// // …or text-only:
+/// kanso::widgets::sidebar_header(ui, None, "Vernier");
+/// # }
+/// ```
+pub fn sidebar_header(ui: &mut Ui, logo: Option<egui::Image<'_>>, name: &str) {
+    ui.add_space(metrics::HEADER_PAD);
+    ui.horizontal(|ui| {
+        if let Some(logo) = logo {
+            ui.add(logo.fit_to_exact_size(egui::vec2(metrics::LOGO_SIZE, metrics::LOGO_SIZE)));
+        }
+        ui.heading(name);
+    });
+    ui.add_space(metrics::HEADER_PAD);
+}
+
 /// A left-aligned, full-width, selectable sidebar row. Returns the
 /// click [`Response`]; the caller owns the selection state.
 pub fn nav_item(ui: &mut Ui, selected: bool, label: &str) -> Response {
