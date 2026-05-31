@@ -31,8 +31,12 @@ pub const CONTROL_HEIGHT: f32 = 28.0;
 /// Border width for inputs / buttons. Constant across rest/hover/focus so
 /// only the *color* changes, never the geometry.
 pub const BORDER_WIDTH: f32 = 1.0;
-/// Corner radius for inputs / neutral buttons.
-pub const CONTROL_CORNER: u8 = 6;
+/// The standard corner radius — applied to every interactive control and
+/// container (nav rows, inputs, buttons, dropdowns and their popups) so
+/// rounding reads consistently across the whole UI. Inline code pills
+/// ([`CODE_CORNER`]) and cards ([`CARD_CORNER`]) keep their own
+/// scale-appropriate radii.
+pub const RADIUS: u8 = 6;
 
 /// Corner radius for an inline code pill.
 pub const CODE_CORNER: f32 = 3.0;
@@ -46,5 +50,3 @@ pub const CODE_PAD_Y: f32 = 2.0;
 pub const CARD_CORNER: f32 = 10.0;
 /// Corner radius for chips / tokens.
 pub const CHIP_CORNER: f32 = 4.0;
-/// Corner radius for the selected/hover fill behind a nav row.
-pub const NAV_CORNER: f32 = 6.0;

@@ -18,7 +18,7 @@ pub fn primary_button(ui: &mut Ui, text: impl Into<String>) -> Response {
     let text_color = ui.visuals().selection.stroke.color;
 
     ui.scope(|ui| {
-        let radius = egui::CornerRadius::same(metrics::CONTROL_CORNER);
+        let radius = egui::CornerRadius::same(metrics::RADIUS);
         let w = &mut ui.visuals_mut().widgets;
         // Border matched to the fill in every state (invisible outline),
         // constant geometry; hover/press only lighten the fill.

@@ -71,12 +71,22 @@ impl Theme {
             spacing.icon_width = 18.0;
             spacing.icon_spacing = 6.0;
 
-            // Nothing grows on hover/press — constant geometry everywhere.
-            let w = &mut style.visuals.widgets;
-            w.inactive.expansion = 0.0;
-            w.hovered.expansion = 0.0;
-            w.active.expansion = 0.0;
-            w.open.expansion = 0.0;
+            // One standard corner radius across every control and
+            // container, and constant geometry (nothing grows on hover).
+            let radius = egui::CornerRadius::same(metrics::RADIUS);
+            let v = &mut style.visuals;
+            v.window_corner_radius = radius;
+            v.menu_corner_radius = radius;
+            for state in [
+                &mut v.widgets.noninteractive,
+                &mut v.widgets.inactive,
+                &mut v.widgets.hovered,
+                &mut v.widgets.active,
+                &mut v.widgets.open,
+            ] {
+                state.corner_radius = radius;
+                state.expansion = 0.0;
+            }
         });
     }
 }

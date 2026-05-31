@@ -14,7 +14,7 @@ use crate::{metrics, palette};
 /// Run `add` with the control visuals applied locally (restored after).
 pub(crate) fn scope<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
     ui.scope(|ui| {
-        let radius = egui::CornerRadius::same(metrics::CONTROL_CORNER);
+        let radius = egui::CornerRadius::same(metrics::RADIUS);
         let stroke = |c| egui::Stroke::new(metrics::BORDER_WIDTH, c);
         let v = ui.visuals_mut();
         v.extreme_bg_color = palette::CONTROL_BG; // text-edit fill

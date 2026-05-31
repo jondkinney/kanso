@@ -45,7 +45,7 @@ pub fn nav_item(ui: &mut Ui, selected: bool, label: &str) -> Response {
     if selected || response.hovered() {
         ui.painter().rect_filled(
             response.rect.expand(-2.0),
-            egui::CornerRadius::same(6),
+            egui::CornerRadius::same(metrics::RADIUS),
             visuals.bg_fill,
         );
     }
