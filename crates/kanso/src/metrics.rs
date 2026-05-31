@@ -26,8 +26,9 @@ pub const CAPTION_CODE_SIZE: f32 = 11.5;
 pub const CAPTION_LINE_HEIGHT: f32 = 22.0;
 
 /// Minimum interactive control height — inputs and buttons share this so
-/// they line up and never change height on hover.
-pub const CONTROL_HEIGHT: f32 = 28.0;
+/// they line up and never change height on hover. Canonical value chosen
+/// across the cohort (hyprcorrect used 30; vernier/kanso were 28).
+pub const CONTROL_HEIGHT: f32 = 30.0;
 /// Border width for inputs / buttons. Constant across rest/hover/focus so
 /// only the *color* changes, never the geometry.
 pub const BORDER_WIDTH: f32 = 1.0;
