@@ -59,11 +59,9 @@ pub fn link(ui: &mut Ui, text: &str) -> Response {
     link_inner(ui, text, false)
 }
 
-/// Like [`link`] but appends a trailing external-link glyph ([`↗`]) to
+/// Like [`link`] but appends a trailing external-link glyph (`↗`) to
 /// signal the click leaves the app. The caller still owns the side
 /// effect; for the common "just open a URL" case prefer [`link_to`].
-///
-/// [`↗`]: EXTERNAL_GLYPH
 pub fn external_link(ui: &mut Ui, text: &str) -> Response {
     link_inner(ui, text, true)
 }
