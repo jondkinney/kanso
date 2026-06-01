@@ -305,6 +305,12 @@ impl Gallery {
             }
             8 => {
                 widgets::section_header(ui, "Select a running app");
+                // Demo: give a couple of entries an icon (reuse the sidebar
+                // logo texture); the rest show the placeholder tile.
+                if let Some(id) = self.logo.as_ref().map(|h| h.id()) {
+                    self.apps[0].icon = Some(id);
+                    self.apps[2].icon = Some(id);
+                }
                 widgets::app_picker(ui, &self.apps, &mut self.selected_app, &mut self.app_query);
                 if let Some(id) = self.selected_app.clone() {
                     ui.add_space(6.0);
