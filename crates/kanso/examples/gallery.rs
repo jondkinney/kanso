@@ -59,6 +59,7 @@ struct DemoSettings {
     primary: Color32,
     guide: Color32,
     api_key: String,
+    model: String,
 }
 
 impl Default for DemoSettings {
@@ -75,6 +76,7 @@ impl Default for DemoSettings {
             primary: Color32::from_rgb(79, 163, 255),
             guide: Color32::from_rgb(80, 200, 120),
             api_key: String::new(),
+            model: "claude-opus-4-8".to_string(),
         }
     }
 }
@@ -284,6 +286,17 @@ impl Gallery {
                             (Density::Comfortable, "Comfortable"),
                         ],
                     );
+                });
+                widgets::setting(ui, |ui| {
+                    widgets::field_label(ui, "Model");
+                    widgets::editable_combo(
+                        ui,
+                        "demo_model",
+                        &mut s.model,
+                        &["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-8"],
+                        "Pick or type a model",
+                    );
+                    widgets::caption(ui, "Editable — pick a suggestion or type your own.");
                 });
                 widgets::setting(ui, |ui| {
                     widgets::color_picker(ui, &mut s.primary, "Primary color");
