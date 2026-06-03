@@ -153,7 +153,19 @@ impl<'a, Num: Numeric> Slider<'a, Num> {
             // `control::scope` gives the handle the cohort's rest/hover/
             // press border colors (it reads widgets.{inactive,hovered,
             // active}); the filled track uses selection.bg_fill (accent).
-            let resp = super::control::scope(ui, |ui| ui.add(slider));
+            let resp = super::control::scope(ui, |ui| {
+                // egui sizes the knob as thickness/2.5 with no style knob of
+                // its own; shrink the drawn circle 25% via a negative handle
+                // expansion so only the knob changes — the rail and the drag
+                // hit-area keep their size. (thickness == CONTROL_HEIGHT here,
+                // which dominates the body-text height.)
+                let knob_shrink = -0.25 * (metrics::CONTROL_HEIGHT / 2.5);
+                let w = &mut ui.visuals_mut().widgets;
+                w.inactive.expansion = knob_shrink;
+                w.hovered.expansion = knob_shrink;
+                w.active.expansion = knob_shrink;
+                ui.add(slider)
+            });
 
             ui.add_space(READOUT_GAP);
             let text = match &formatter {
