@@ -25,7 +25,7 @@ mod slider;
 mod toggle;
 
 pub use about_pane::{AboutInfo, about_pane};
-pub use app_picker::{AppEntry, app_picker};
+pub use app_picker::{AppEntry, app_picker, app_picker_combo};
 pub use banner::{Severity, banner, banner_action};
 pub use buttons::{primary_button, secondary_button};
 pub use caption::caption;

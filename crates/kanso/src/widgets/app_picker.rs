@@ -10,6 +10,8 @@
 //! the candidate [`AppEntry`] list (each carrying an already-uploaded icon
 //! texture, if any) plus the selection + query state.
 
+use std::hash::Hash;
+
 use egui::{Response, Ui};
 
 use crate::{metrics, palette};
@@ -58,13 +60,27 @@ pub fn app_picker(
     selected: &mut Option<String>,
     query: &mut String,
 ) -> Response {
+    picker_list(ui, apps, selected, query).0
+}
+
+/// Shared body for [`app_picker`] and [`app_picker_combo`]: the search field
+/// over the scrollable row list. Returns the search field's [`Response`] and
+/// whether an entry was picked this frame (so the combo can close on pick
+/// without closing when the search field is merely focused).
+fn picker_list(
+    ui: &mut Ui,
+    apps: &[AppEntry],
+    selected: &mut Option<String>,
+    query: &mut String,
+) -> (Response, bool) {
     let resp = super::search_field(ui, query, "Search apps…");
     let needle = query.to_lowercase();
     let show_icons = apps.iter().any(|a| a.icon.is_some());
-    egui::ScrollArea::vertical()
+    let picked = egui::ScrollArea::vertical()
         .max_height(LIST_MAX_HEIGHT)
         .auto_shrink([false, true])
         .show(ui, |ui| {
+            let mut picked = false;
             for app in apps
                 .iter()
                 .filter(|a| needle.is_empty() || a.name.to_lowercase().contains(&needle))
@@ -72,10 +88,56 @@ pub fn app_picker(
                 let is_selected = selected.as_deref() == Some(app.id.as_str());
                 if app_row(ui, app, is_selected, show_icons).clicked() {
                     *selected = Some(app.id.clone());
+                    picked = true;
                 }
             }
-        });
-    resp
+            picked
+        })
+        .inner;
+    (resp, picked)
+}
+
+/// The same searchable, single-select [`app_picker`] list, collapsed behind
+/// a combo button so it doesn't take vertical space until opened. The button
+/// shows the selected entry's name (or `placeholder` when nothing is
+/// chosen); opening it reveals the search field + scrollable icon list.
+///
+/// Prefer this over [`app_picker`] when the picker shares a settings pane
+/// with other controls and an always-open list would make the page too
+/// tall. Pass an `id_salt` unique within the parent `Ui`. Returns the combo
+/// button's [`Response`].
+pub fn app_picker_combo(
+    ui: &mut Ui,
+    id_salt: impl Hash,
+    apps: &[AppEntry],
+    selected: &mut Option<String>,
+    query: &mut String,
+    placeholder: &str,
+) -> Response {
+    let selected_text = selected
+        .as_deref()
+        .and_then(|id| apps.iter().find(|a| a.id == id))
+        .map(|a| a.name.as_str())
+        .unwrap_or(placeholder)
+        .to_owned();
+    // `.width(w)` makes the closed button's outer width ≈ w, so this fills
+    // the row like a full-width field; the popup matches the button width.
+    let w = ui.available_width();
+    egui::ComboBox::from_id_salt(id_salt)
+        .selected_text(selected_text)
+        .width(w)
+        // Default `CloseOnClick` closes the popup the moment the user clicks
+        // the search field. Switch to close-on-click-*outside* so typing in
+        // the search keeps it open, and close explicitly when a row is picked.
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show_ui(ui, |ui| {
+            ui.set_min_width(w);
+            let (_, picked) = picker_list(ui, apps, selected, query);
+            if picked {
+                ui.close();
+            }
+        })
+        .response
 }
 
 /// One picker row. Without an icon column this is just a [`super::nav_item`]
