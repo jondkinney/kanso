@@ -447,7 +447,17 @@ pub fn scroll_view<R>(
                 };
             }
         }
-        ScrollState::Idle => {}
+        ScrollState::Idle => {
+            // Content may have shrunk since last frame (e.g. the host swapped in
+            // a shorter view), leaving the resting offset past the new bottom —
+            // which would render the content off-screen until the next scroll.
+            // Clamp back into range when settled so the view can never go blank.
+            let max = sp.max_offset(dim);
+            if sp.offset > max {
+                sp.offset = max;
+                sp.pos = max;
+            }
+        }
     }
 
     if sp.state != ScrollState::Idle {
@@ -508,4 +518,14 @@ pub fn scroll_view<R>(
 
     ui.data_mut(|d| d.insert_temp(id, sp));
     r
+}
+
+/// Reset a [`scroll_view`] (identified by the same `id_salt`, on the same `ui`)
+/// back to the top, clearing its kinetic and over-scroll state. Call right
+/// before `scroll_view` when the content is swapped wholesale — e.g. changing
+/// which section a single scroll area renders — so the new content opens at the
+/// top instead of inheriting the previous offset.
+pub fn scroll_view_reset(ui: &egui::Ui, id_salt: impl Hash) {
+    let id = ui.make_persistent_id((id_salt, "kanso_scroll_view"));
+    ui.data_mut(|d| d.insert_temp(id, ScrollPhysics::default()));
 }
