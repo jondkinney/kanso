@@ -94,6 +94,7 @@ const SECTIONS: &[&str] = &[
     "Captions",
     "Progress",
     "About",
+    "Scroll lab",
 ];
 
 struct Gallery {
@@ -106,13 +107,15 @@ struct Gallery {
     app_query: String,
     search: String,
     logo: Option<egui::TextureHandle>,
+    scroll_image: Option<egui::TextureHandle>,
+    show_scroll_tuning: bool,
     status: String,
 }
 
 impl Gallery {
     fn new() -> Self {
         Self {
-            section: 0,
+            section: 12, // open on the Scroll lab for scroll-feel testing
             settings: Dirty::new(DemoSettings::default()),
             hotkey: "SUPER+SHIFT+K".to_string(),
             capturing: false,
@@ -126,6 +129,8 @@ impl Gallery {
             app_query: String::new(),
             search: String::new(),
             logo: None,
+            scroll_image: None,
+            show_scroll_tuning: false,
             status: String::new(),
         }
     }
@@ -355,6 +360,100 @@ impl Gallery {
                 widgets::caption(ui, "A slim, label-less rail:");
                 widgets::ProgressBar::new(0.7).height(6.0).show(ui);
             }
+            12 => {
+                widgets::section_header(ui, "Scroll lab");
+
+                let toggle = if self.show_scroll_tuning {
+                    "Hide tuning panel"
+                } else {
+                    "Show tuning panel"
+                };
+                if ui.button(toggle).clicked() {
+                    self.show_scroll_tuning = !self.show_scroll_tuning;
+                }
+                ui.add_space(8.0);
+
+                widgets::card(ui, |ui| {
+                    ui.label(
+                        "This page is a scroll test bench. `kanso::scroll::scroll_view` \
+                         owns its scroll offset and runs one controller for the whole \
+                         gesture: drag → kinetic fling → rubber-band over-scroll at the \
+                         edges. The velocity seed is frame-rate independent, so the feel \
+                         is identical in a debug build and an optimized release build, \
+                         and at any monitor refresh rate.",
+                    );
+                    ui.add_space(10.0);
+                    widgets::caption(
+                        ui,
+                        "Tuning — click **Show tuning panel** above for a floating set of \
+                         sliders that edit `kanso::scroll::ScrollTuning` live, so the page \
+                         behind responds on the next flick. Find the feel, then bake the \
+                         values back into the constants in `scroll.rs`.",
+                    );
+                    ui.add_space(10.0);
+                    ui.label(egui::RichText::new("What to test").strong());
+                    widgets::caption(ui, "1. Scroll velocity — flick and watch how far the coast carries.");
+                    widgets::caption(ui, "2. Over-scroll flick — flick hard into the top or bottom for the rubber-band bounce.");
+                    widgets::caption(ui, "3. Rest-to-stop — mid-coast, rest two fingers on the trackpad; it should halt instantly.");
+                });
+                ui.add_space(18.0);
+
+                let lorem = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed \
+                    do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim \
+                    ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut \
+                    aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit \
+                    in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur \
+                    sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt \
+                    mollit anim id est laborum.";
+                let para = |ui: &mut egui::Ui, n: usize| {
+                    for _ in 0..n {
+                        ui.label(lorem);
+                        ui.add_space(12.0);
+                    }
+                };
+
+                // A generated gradient — cached on first show — gives the page real
+                // pixel height to scroll past.
+                let img =
+                    self.scroll_image.get_or_insert_with(|| make_scroll_image(ui.ctx())).clone();
+
+                para(ui, 3);
+                ui.add(egui::Image::new(&img).max_width(ui.available_width()));
+                widgets::caption(ui, "Fig 1. A gradient with real height to fling past.");
+                ui.add_space(16.0);
+                para(ui, 3);
+
+                code_block(
+                    ui,
+                    "// the fling seed — now frame-rate independent\n\
+                     let alpha = 1.0 - (-dt / VEL_TAU).exp();\n\
+                     self.vel_ema += (instant - self.vel_ema) * alpha;\n\
+                     // ...on lift:\n\
+                     if vel.abs() > FLING_MIN {\n    \
+                         self.velocity = vel * FLING_SCALE;\n    \
+                         self.state = ScrollState::Flinging;\n\
+                     }",
+                );
+                ui.add_space(16.0);
+                para(ui, 4);
+
+                code_block(
+                    ui,
+                    "// rubber-band over-scroll (WebKit elasticity, capped at MAX_PULL)\n\
+                     fn rb_pull(raw: f32, dim: f32) -> f32 {\n    \
+                         let cap = MAX_PULL.min(dim);\n    \
+                         raw.signum() * (1.0 - 1.0 / (raw.abs() * RB_STRETCH_C / cap + 1.0)) * cap\n\
+                     }",
+                );
+                ui.add_space(16.0);
+                para(ui, 3);
+                ui.add(egui::Image::new(&img).max_width(ui.available_width()));
+                ui.add_space(16.0);
+                para(ui, 4);
+
+                ui.add_space(24.0);
+                widgets::caption(ui, "— end of scroll lab — flick back up to test the top edge —");
+            }
             _ => {
                 let logo = self.logo.clone();
                 widgets::about_pane(
@@ -412,7 +511,185 @@ impl eframe::App for Gallery {
             ui.add_space(8.0);
             kanso::scroll::scroll_view(ui, "gallery_content", |ui| self.render_section(ui));
         });
+
+        // Live scroll-feel tuning: a floating panel (outside the scroll view, so it
+        // stays put while you fling the page behind it) that drives ScrollTuning.
+        // Hidden by default — toggled from the Scroll lab page.
+        if self.section == 12 && self.show_scroll_tuning {
+            scroll_tuning_window(ctx);
+        }
     }
+}
+
+/// Per-field lock flags for the tuning panel — a checked row is left untouched by
+/// "Reset unlocked". Persisted in egui memory so it survives across frames.
+#[derive(Clone, Copy, Default)]
+struct TuningLocks {
+    fling_gain: bool,
+    fling_friction: bool,
+    fling_knee: bool,
+    fling_min: bool,
+    vel_tau: bool,
+    rb_amplitude: bool,
+    rb_period: bool,
+    max_pull: bool,
+}
+
+/// Floating sliders that edit the live [`kanso::scroll::ScrollTuning`] so the
+/// scroll feel can be dialed in against a reference without rebuilding. Each row
+/// has a lock so Reset only restores the values you're still experimenting with.
+fn scroll_tuning_window(ctx: &egui::Context) {
+    use kanso::scroll::{ScrollTuning, scroll_tuning, set_scroll_tuning};
+    let locks_id = egui::Id::new("gallery_tuning_locks");
+    let mut locks: TuningLocks = ctx.data_mut(|d| d.get_temp(locks_id).unwrap_or_default());
+    let mut t = scroll_tuning(ctx);
+
+    // One row = [lock] [slider] [label]. The label is a separate element so its
+    // hover tooltip (the detailed description) fires only over the label text.
+    fn row(
+        ui: &mut egui::Ui,
+        lock: &mut bool,
+        slider: egui::Slider<'_>,
+        label: &str,
+        tip: &str,
+    ) {
+        ui.horizontal(|ui| {
+            ui.checkbox(lock, "");
+            ui.add(slider);
+            ui.label(label).on_hover_text(tip);
+        });
+    }
+
+    egui::Window::new("Scroll tuning")
+        .default_pos([28.0, 96.0])
+        .resizable(false)
+        .show(ctx, |ui| {
+            ui.style_mut().spacing.slider_width = 180.0;
+            ui.label(
+                egui::RichText::new("Check a box to lock that value — Reset only touches unlocked rows.")
+                    .weak()
+                    .small(),
+            );
+            ui.add_space(4.0);
+
+            ui.label(egui::RichText::new("Coast / fling").strong());
+            row(
+                ui,
+                &mut locks.fling_gain,
+                egui::Slider::new(&mut t.fling_gain, 0.0..=0.0015)
+                    .custom_formatter(|v, _| format!("{v:.5}")),
+                "gain — top-end coast",
+                "The main top-end dial: how much farther hard flicks over-coast. \
+                 Super-linear gain per px/s above the knee — it lengthens the decay τ \
+                 for faster flicks so a hard throw carries disproportionately far \
+                 (macOS-style). Raise if hard flicks fall short; lower if they run away.",
+            );
+            // Edit the glide as a time-constant (intuitive), convert to per-ms decay.
+            let mut tau = -1.0 / (1000.0 * t.fling_friction.ln());
+            row(
+                ui,
+                &mut locks.fling_friction,
+                egui::Slider::new(&mut tau, 0.4..=2.5),
+                "glide τ (s)",
+                "Overall glide length / floatiness — the base fling decay shown as a \
+                 time constant (FLING_FRICTION). Longer τ keeps every coast gliding \
+                 longer before it settles; affects all flick speeds proportionally.",
+            );
+            t.fling_friction = (-1.0 / (1000.0 * tau)).exp();
+            row(
+                ui,
+                &mut locks.fling_knee,
+                egui::Slider::new(&mut t.fling_knee, 200.0..=1000.0),
+                "super-linear knee",
+                "Flick speed (px/s) where the top-end boost begins. Below it flings \
+                 coast ≈ 1:1 with your finger; above it the gain kicks in. Raise the \
+                 knee so only genuinely hard flicks get the extra carry.",
+            );
+            row(
+                ui,
+                &mut locks.fling_min,
+                egui::Slider::new(&mut t.fling_min, 50.0..=800.0),
+                "fling min (mini-flick)",
+                "Minimum lift speed (px/s) that starts a fling. Lower so smaller quick \
+                 flicks still coast; too low and a slow controlled scroll coasts when \
+                 you meant it to stop where you lifted.",
+            );
+            row(
+                ui,
+                &mut locks.vel_tau,
+                egui::Slider::new(&mut t.vel_tau, 0.004..=0.030)
+                    .custom_formatter(|v, _| format!("{v:.3}")),
+                "vel τ (seed window)",
+                "Velocity-seed averaging window (s). Smaller captures the sharp peak of \
+                 a fast flick (punchier, twitchier); larger averages more (smoother, but \
+                 laggier and it under-reads a quick snap). Frame-rate independent.",
+            );
+
+            ui.separator();
+            ui.label(egui::RichText::new("Over-scroll bounce").strong());
+            row(
+                ui,
+                &mut locks.rb_amplitude,
+                egui::Slider::new(&mut t.rb_amplitude, 0.2..=3.0),
+                "amplitude — shoot/far",
+                "How fast AND far the edge bounce throws — sets both the initial \
+                 shoot-in velocity (∝ v·A) and the peak travel. Raise to make the \
+                 rubber-band reach farther and snap out harder.",
+            );
+            row(
+                ui,
+                &mut locks.rb_period,
+                egui::Slider::new(&mut t.rb_period, 0.6..=2.5),
+                "period — snap speed",
+                "Bounce timing: peak at t* = period/stiffness, settle in ~4·t*. Lower = \
+                 snappier (reaches peak and springs back quicker); higher = a larger, \
+                 calmer, slower bounce.",
+            );
+            row(
+                ui,
+                &mut locks.max_pull,
+                egui::Slider::new(&mut t.max_pull, 20.0..=150.0),
+                "manual pull cap (px)",
+                "Slow-drag overscroll asymptote — how far a deliberate pull past the \
+                 edge can stretch (approached but never quite reached). Independent of \
+                 the velocity bounce above.",
+            );
+
+            ui.separator();
+            ui.horizontal(|ui| {
+                if ui.button("Reset unlocked").clicked() {
+                    let d = ScrollTuning::default();
+                    if !locks.fling_gain {
+                        t.fling_gain = d.fling_gain;
+                    }
+                    if !locks.fling_friction {
+                        t.fling_friction = d.fling_friction;
+                    }
+                    if !locks.fling_knee {
+                        t.fling_knee = d.fling_knee;
+                    }
+                    if !locks.fling_min {
+                        t.fling_min = d.fling_min;
+                    }
+                    if !locks.vel_tau {
+                        t.vel_tau = d.vel_tau;
+                    }
+                    if !locks.rb_amplitude {
+                        t.rb_amplitude = d.rb_amplitude;
+                    }
+                    if !locks.rb_period {
+                        t.rb_period = d.rb_period;
+                    }
+                    if !locks.max_pull {
+                        t.max_pull = d.max_pull;
+                    }
+                }
+                ui.label(egui::RichText::new("live — flick the page behind").weak().small());
+            });
+        });
+
+    ctx.data_mut(|d| d.insert_temp(locks_id, locks));
+    set_scroll_tuning(ctx, t);
 }
 
 /// A throwaway placeholder logo (a filled teal disc) so the gallery can
@@ -436,4 +713,29 @@ fn make_logo(ctx: &egui::Context) -> egui::TextureHandle {
     }
     let image = egui::ColorImage::from_rgba_unmultiplied([size, size], &rgba);
     ctx.load_texture("kanso-demo-logo", image, egui::TextureOptions::LINEAR)
+}
+
+/// A generated gradient placeholder image for the Scroll lab — real pixels with
+/// real height so there's something to fling past (no external asset needed).
+fn make_scroll_image(ctx: &egui::Context) -> egui::TextureHandle {
+    let (w, h) = (560usize, 280usize);
+    let mut rgba = vec![0u8; w * h * 4];
+    for y in 0..h {
+        for x in 0..w {
+            let i = (y * w + x) * 4;
+            let r = (40 + x * 180 / w) as u8;
+            let g = (60 + y * 150 / h) as u8;
+            let b = (120 + (x + y) * 90 / (w + h)) as u8;
+            rgba[i..i + 4].copy_from_slice(&[r, g, b, 255]);
+        }
+    }
+    let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
+    ctx.load_texture("scroll-lab-image", image, egui::TextureOptions::LINEAR)
+}
+
+/// A monospace code snippet inside a kanso card — for the Scroll lab page.
+fn code_block(ui: &mut egui::Ui, code: &str) {
+    widgets::card(ui, |ui| {
+        ui.label(egui::RichText::new(code).monospace());
+    });
 }
