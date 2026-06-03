@@ -311,7 +311,14 @@ impl Gallery {
                     self.apps[0].icon = Some(id);
                     self.apps[2].icon = Some(id);
                 }
-                widgets::app_picker(ui, &self.apps, &mut self.selected_app, &mut self.app_query);
+                widgets::app_picker_combo(
+                    ui,
+                    "demo_apps",
+                    &self.apps,
+                    &mut self.selected_app,
+                    &mut self.app_query,
+                    "Choose an app…",
+                );
                 if let Some(id) = self.selected_app.clone() {
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
@@ -370,6 +377,7 @@ impl Gallery {
 
 impl eframe::App for Gallery {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        kanso::scroll::scroll_momentum(ctx);
         widgets::sidebar(ctx, metrics::SIDEBAR_WIDTH, |ui| {
             let logo = self.logo.get_or_insert_with(|| make_logo(ui.ctx()));
             widgets::sidebar_header(ui, Some(egui::Image::new(&*logo)), "kanso");
@@ -402,9 +410,7 @@ impl eframe::App for Gallery {
 
         widgets::content(ctx, |ui| {
             ui.add_space(8.0);
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| self.render_section(ui));
+            kanso::scroll::scroll_view(ui, "gallery_content", |ui| self.render_section(ui));
         });
     }
 }
