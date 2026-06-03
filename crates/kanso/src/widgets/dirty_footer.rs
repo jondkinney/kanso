@@ -222,12 +222,15 @@ impl DirtyFooter {
     pub fn show(self, ui: &mut Ui) -> FooterAction {
         let mut action = FooterAction::None;
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            // Right-to-left: Save sits at the far right, then Revert, then
-            // the unsaved dot + label — matching both apps' footer order.
+            // Own the internal gaps explicitly rather than inheriting the
+            // caller's row item_spacing (which inflated both the Save↔Revert and
+            // dot↔label gaps). Right-to-left: Save at the far right, then Revert,
+            // then the unsaved dot + label — matching both apps' footer order.
+            ui.spacing_mut().item_spacing.x = 0.0;
             if save_button(ui, self.save_label, self.dirty).clicked() {
                 action = FooterAction::Save;
             }
-            ui.add_space(8.0);
+            ui.add_space(SAVE_REVERT_GAP);
             if ui
                 .add_enabled(self.revert_enabled, egui::Button::new(self.revert_label))
                 .clicked()
@@ -235,7 +238,7 @@ impl DirtyFooter {
                 action = FooterAction::Revert;
             }
             if self.dirty {
-                ui.add_space(8.0);
+                ui.add_space(INDICATOR_GAP);
                 unsaved_indicator(ui, self.unsaved_label);
             }
         });
@@ -282,7 +285,7 @@ fn save_button(ui: &mut Ui, label: &str, enabled: bool) -> Response {
 /// is allocated first and the dot lands to its left.
 fn unsaved_indicator(ui: &mut Ui, label: &str) {
     ui.colored_label(palette::WARN, label);
-    ui.add_space(2.0);
+    ui.add_space(DOT_LABEL_GAP);
     let (rect, _) = ui.allocate_exact_size(UNSAVED_DOT_SIZE, egui::Sense::hover());
     ui.painter()
         .circle_filled(rect.center(), UNSAVED_DOT_RADIUS, palette::WARN);
@@ -299,3 +302,9 @@ fn lighten(c: egui::Color32, t: f32) -> egui::Color32 {
 const UNSAVED_DOT_SIZE: egui::Vec2 = egui::vec2(8.0, 8.0);
 /// Radius of the painted unsaved dot.
 const UNSAVED_DOT_RADIUS: f32 = 4.0;
+/// Gap between the Revert and Save buttons — a tight pair.
+const SAVE_REVERT_GAP: f32 = 6.0;
+/// Gap separating the unsaved indicator from the Revert button.
+const INDICATOR_GAP: f32 = 14.0;
+/// Gap between the unsaved dot and its label — read as one unit.
+const DOT_LABEL_GAP: f32 = 4.0;
