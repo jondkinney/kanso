@@ -392,9 +392,18 @@ impl Gallery {
                     );
                     ui.add_space(10.0);
                     ui.label(egui::RichText::new("What to test").strong());
-                    widgets::caption(ui, "1. Scroll velocity — flick and watch how far the coast carries.");
-                    widgets::caption(ui, "2. Over-scroll flick — flick hard into the top or bottom for the rubber-band bounce.");
-                    widgets::caption(ui, "3. Rest-to-stop — mid-coast, rest two fingers on the trackpad; it should halt instantly.");
+                    widgets::caption(
+                        ui,
+                        "1. Scroll velocity — flick and watch how far the coast carries.",
+                    );
+                    widgets::caption(
+                        ui,
+                        "2. Over-scroll flick — flick hard into the top or bottom for the rubber-band bounce.",
+                    );
+                    widgets::caption(
+                        ui,
+                        "3. Rest-to-stop — mid-coast, rest two fingers on the trackpad; it should halt instantly.",
+                    );
                 });
                 ui.add_space(18.0);
 
@@ -414,8 +423,10 @@ impl Gallery {
 
                 // A generated gradient — cached on first show — gives the page real
                 // pixel height to scroll past.
-                let img =
-                    self.scroll_image.get_or_insert_with(|| make_scroll_image(ui.ctx())).clone();
+                let img = self
+                    .scroll_image
+                    .get_or_insert_with(|| make_scroll_image(ui.ctx()))
+                    .clone();
 
                 para(ui, 3);
                 ui.add(egui::Image::new(&img).max_width(ui.available_width()));
@@ -452,7 +463,10 @@ impl Gallery {
                 para(ui, 4);
 
                 ui.add_space(24.0);
-                widgets::caption(ui, "— end of scroll lab — flick back up to test the top edge —");
+                widgets::caption(
+                    ui,
+                    "— end of scroll lab — flick back up to test the top edge —",
+                );
             }
             _ => {
                 let logo = self.logo.clone();
@@ -546,13 +560,7 @@ fn scroll_tuning_window(ctx: &egui::Context) {
 
     // One row = [lock] [slider] [label]. The label is a separate element so its
     // hover tooltip (the detailed description) fires only over the label text.
-    fn row(
-        ui: &mut egui::Ui,
-        lock: &mut bool,
-        slider: egui::Slider<'_>,
-        label: &str,
-        tip: &str,
-    ) {
+    fn row(ui: &mut egui::Ui, lock: &mut bool, slider: egui::Slider<'_>, label: &str, tip: &str) {
         ui.horizontal(|ui| {
             ui.checkbox(lock, "");
             ui.add(slider);
@@ -566,9 +574,11 @@ fn scroll_tuning_window(ctx: &egui::Context) {
         .show(ctx, |ui| {
             ui.style_mut().spacing.slider_width = 180.0;
             ui.label(
-                egui::RichText::new("Check a box to lock that value — Reset only touches unlocked rows.")
-                    .weak()
-                    .small(),
+                egui::RichText::new(
+                    "Check a box to lock that value — Reset only touches unlocked rows.",
+                )
+                .weak()
+                .small(),
             );
             ui.add_space(4.0);
 
@@ -684,7 +694,11 @@ fn scroll_tuning_window(ctx: &egui::Context) {
                         t.max_pull = d.max_pull;
                     }
                 }
-                ui.label(egui::RichText::new("live — flick the page behind").weak().small());
+                ui.label(
+                    egui::RichText::new("live — flick the page behind")
+                        .weak()
+                        .small(),
+                );
             });
         });
 
