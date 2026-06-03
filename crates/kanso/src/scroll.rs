@@ -173,11 +173,14 @@ const RELEASE_DELAY: f32 = 0.06;
 
 /// Snap-back stiffness (native WebKit constant).
 const RB_STIFFNESS: f32 = 20.0;
-/// Snap velocity-seed amplitude (native) — how far the release velocity carries
-/// the stretch out before it decays.
-const RB_AMPLITUDE: f32 = 0.31;
-/// Snap period (native); larger = looser / slower bounce.
-const RB_PERIOD: f32 = 1.6;
+/// Snap velocity-seed amplitude — sets both how *fast* the bounce shoots into the
+/// overscroll (initial velocity ∝ `v·A`) and how far (peak ≈ `v·A·(P/K)/e`).
+/// Raised well above native (0.31) so a flick at the edge snaps out fast and far.
+const RB_AMPLITUDE: f32 = 3.0;
+/// Snap period; the velocity-bounce peaks at `t* = RB_PERIOD/RB_STIFFNESS` and
+/// settles in ~`4·t*`. Set with amplitude on a trackpad against macOS so the edge
+/// bounce shoots out fast/far and springs back at the right pace.
+const RB_PERIOD: f32 = 1.5;
 /// Pull-curve diminishing-returns constant (native); lower resists more / less
 /// travel. Sets the *initial* pull slope (independent of the asymptote below), so
 /// the first bit of overscroll feels the same regardless of `MAX_PULL`.
@@ -187,71 +190,164 @@ const RB_STRETCH_C: f32 = 0.55;
 /// fraction of the screen; macOS on a trackpad caps far shorter, so we asymptote
 /// at a fixed ~screenful-independent distance. Only caps the manual pull — the
 /// flick bounce is velocity-driven (`rb_elastic`) and can still exceed this.
-const MAX_PULL: f32 = 60.0;
-/// Fling friction: fraction of velocity kept per millisecond. `0.999` ≈ a 1 s
-/// exponential time-constant — the floaty coast the cohort tuned to (the doc's
-/// "normal" 0.998 is noticeably snappier; 0.99 = "fast").
-const FLING_FRICTION: f32 = 0.999;
+const MAX_PULL: f32 = 50.0;
+/// Base fling friction: fraction of velocity kept per millisecond. `0.9975` ≈ a
+/// 0.4 s exponential time-constant — the *base* coast; hard flicks stretch this τ
+/// via `FLING_GAIN` (super-linear coast). Set on a trackpad against macOS.
+const FLING_FRICTION: f32 = 0.9975;
 /// Low-pass time constant (s) for the *rendered* offset/stretch — stands in for
 /// the egui scroll smoothing we bypassed, so direct scrolling reads smoothly
 /// instead of stepping per raw delta. Small enough not to feel laggy.
 const SCROLL_RENDER_TAU: f32 = 0.03;
-/// EMA weight for the per-frame velocity track: higher follows the *current*
-/// flick speed more tightly, so the value at lift reflects the peak of an
-/// accelerating throw (matches the tuned momentum module's `velocity_smoothing`).
-const VEL_SMOOTHING: f32 = 0.8;
+/// Time constant (s) for the velocity-track EMA — the averaging window over the
+/// per-frame `raw/dt` that seeds the fling. Frame-rate **independent** (applied
+/// as `1 - exp(-dt/τ)`), so the launch velocity, and thus coast/overscroll
+/// distance, is the same at any FPS — a debug build and an optimized release
+/// build feel identical. Larger = smoother/slower seed; smaller = peakier/faster.
+/// Tune against a RELEASE build (that's what ships), e.g.
+/// `cargo run --release --example gallery`.
+const VEL_TAU: f32 = 0.004;
 /// Time constant (s) for spreading a coarse raw scroll burst across frames so a
 /// slow drag glides instead of jumping. Small enough that the lag is negligible
 /// at flick speed; large enough to de-chunk a slow scroll.
-const DRAG_SMOOTH_TAU: f32 = 0.025;
-/// Scale applied to the launch velocity when starting a *fling* (not the
-/// rubber-band, which keeps the raw seed). The tuned momentum module's coast was
-/// re-smoothed by egui's `ScrollArea`, damping it; driving the offset directly
-/// has no such damping, so a hard flick over-carries without this trim. Scaling
-/// the seed trims coast distance (`= v0 * tau`) linearly while leaving the decay
-/// curve — and thus the glide/ease feel — unchanged.
-const FLING_SCALE: f32 = 0.385;
-/// Minimum lift speed (px/s) to start a fling. Set *above* deliberate slow-scroll
-/// release speeds so controlled scrolling in mid-page just stops where you lift,
-/// and only a genuine flick coasts.
-const FLING_MIN: f32 = 500.0;
+const DRAG_SMOOTH_TAU: f32 = 0.009;
+/// Base coast-τ scale at the fling knee. The fling always *launches* at the
+/// finger speed (continuous hand-off); this scales the decay τ, not the launch,
+/// so a gentle flick (`scale = 1`) decays at the base `FLING_FRICTION` τ.
+const FLING_SCALE: f32 = 1.0;
+/// Per-(px/s)-over-the-knee added to the τ scale: `scale = FLING_SCALE +
+/// FLING_GAIN * (|v| - FLING_KNEE).max(0)`, and the fling decays at
+/// `FLING_FRICTION^(1/scale)` — a longer τ for hard flicks, so the coast is
+/// *super-linear* in flick speed (macOS-style) without inflating the launch
+/// (which keeps the edge bounce honest). The top-end dial.
+const FLING_GAIN: f32 = 0.0005;
+/// Flick speed (px/s) below which the coast stays at the base τ; above it the
+/// super-linear τ stretch kicks in, so gentle scrolling is unaffected.
+const FLING_KNEE: f32 = 200.0;
+/// Minimum lift speed (px/s) to start a fling. Above deliberate slow-scroll
+/// release speeds so a controlled scroll just stops where you lift, but low
+/// enough that a quick *small* flick still coasts.
+const FLING_MIN: f32 = 100.0;
 /// A fling settles (stops) below this speed (px/s).
 const FLING_STOP: f32 = 20.0;
 /// No scroll event for this long (s) is taken as "fingers lifted" — egui drops
 /// the trackpad gesture phase, so we infer the lift from a gap in events.
-const LIFT_GAP: f32 = 0.06;
+/// Shorter = less on-screen velocity bleeds away before the fling fires (smaller
+/// hand-off step); must stay above the inter-event gap to avoid false lifts.
+const LIFT_GAP: f32 = 0.045;
+/// Once a drag pauses longer than this (s) — past the normal inter-event cadence
+/// but before a confirmed lift — the view coasts at the tracked velocity instead
+/// of letting the drained position freeze. This makes the drag→fling hand-off
+/// seamless (no velocity step / hitch). Must sit above the inter-event gap so
+/// normal mid-drag frames keep draining, and below `LIFT_GAP`.
+const COAST_GAP: f32 = 0.018;
 /// Width (px) reserved at the right edge for the scrollbar.
 const SCROLLBAR_WIDTH: f32 = 8.0;
 
+/// Live-tunable scroll-feel knobs. Every field defaults to the matching module
+/// constant, so behaviour is unchanged until an app overrides them via
+/// [`set_scroll_tuning`]. Stored in egui memory and refreshed into each view per
+/// frame, so edits (e.g. the gallery's tuning sliders) take effect immediately.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ScrollTuning {
+    /// Manual over-scroll asymptote (px): how far a slow pull can stretch.
+    pub max_pull: f32,
+    /// Pull-curve diminishing-returns constant; lower resists more.
+    pub rb_stretch_c: f32,
+    /// Rubber-band stiffness; the velocity bounce peaks at `rb_period/rb_stiffness`.
+    pub rb_stiffness: f32,
+    /// Rubber-band period; raises both the bounce travel and its time-to-peak.
+    pub rb_period: f32,
+    /// Velocity-bounce amplitude: how fast/far a flick shoots into the overscroll.
+    pub rb_amplitude: f32,
+    /// Velocity-seed EMA window (s): the lift speed is averaged over ~this long.
+    pub vel_tau: f32,
+    /// Drag de-chunk time-constant (s).
+    pub drag_smooth_tau: f32,
+    /// Pause (s) past which a drag coasts at the tracked velocity (hitch-free).
+    pub coast_gap: f32,
+    /// No-event gap (s) taken as a finger lift.
+    pub lift_gap: f32,
+    /// Base launch scale at the fling knee (≈ 1:1 with the lift speed).
+    pub fling_scale: f32,
+    /// Super-linear coast gain per px/s above the knee (longer τ for hard flicks).
+    pub fling_gain: f32,
+    /// Flick speed (px/s) above which the super-linear coast kicks in.
+    pub fling_knee: f32,
+    /// Minimum lift speed (px/s) to start a fling.
+    pub fling_min: f32,
+    /// Base fling decay (velocity kept per ms): the overall glide length.
+    pub fling_friction: f32,
+    /// A fling stops below this speed (px/s).
+    pub fling_stop: f32,
+}
+
+impl Default for ScrollTuning {
+    fn default() -> Self {
+        Self {
+            max_pull: MAX_PULL,
+            rb_stretch_c: RB_STRETCH_C,
+            rb_stiffness: RB_STIFFNESS,
+            rb_period: RB_PERIOD,
+            rb_amplitude: RB_AMPLITUDE,
+            vel_tau: VEL_TAU,
+            drag_smooth_tau: DRAG_SMOOTH_TAU,
+            coast_gap: COAST_GAP,
+            lift_gap: LIFT_GAP,
+            fling_scale: FLING_SCALE,
+            fling_gain: FLING_GAIN,
+            fling_knee: FLING_KNEE,
+            fling_min: FLING_MIN,
+            fling_friction: FLING_FRICTION,
+            fling_stop: FLING_STOP,
+        }
+    }
+}
+
+fn scroll_tuning_id() -> Id {
+    Id::new("kanso_scroll_tuning")
+}
+
+/// Read the scroll-feel tuning active for this context (defaults if unset).
+pub fn scroll_tuning(ctx: &Context) -> ScrollTuning {
+    ctx.data_mut(|d| d.get_temp(scroll_tuning_id()).unwrap_or_default())
+}
+
+/// Override the scroll-feel tuning for every [`scroll_view`] in this context.
+/// Intended for live tuning (sliders); apps normally rely on the defaults.
+pub fn set_scroll_tuning(ctx: &Context, tuning: ScrollTuning) {
+    ctx.data_mut(|d| d.insert_temp(scroll_tuning_id(), tuning));
+}
+
 /// Pull curve: accumulated raw overscroll -> damped, asymptotic visible stretch
 /// (approaches `MAX_PULL`, clamped to the viewport, but never reaches it).
-fn rb_pull(raw: f32, dim: f32) -> f32 {
+fn rb_pull(raw: f32, dim: f32, tun: &ScrollTuning) -> f32 {
     if dim <= 0.0 {
         return 0.0;
     }
-    let cap = MAX_PULL.min(dim);
-    raw.signum() * (1.0 - 1.0 / (raw.abs() * RB_STRETCH_C / cap + 1.0)) * cap
+    let cap = tun.max_pull.min(dim);
+    raw.signum() * (1.0 - 1.0 / (raw.abs() * tun.rb_stretch_c / cap + 1.0)) * cap
 }
 
 /// Inverse of [`rb_pull`] — the raw overscroll that yields a given visible
 /// stretch (keeps the unclamped position consistent during a bounce). A
 /// velocity-driven bounce can push the stretch past `cap`; the `min(0.999)` keeps
 /// the result finite there (the excess is bookkeeping, not rendered).
-fn rb_pull_inverse(stretch: f32, dim: f32) -> f32 {
+fn rb_pull_inverse(stretch: f32, dim: f32, tun: &ScrollTuning) -> f32 {
     if dim <= 0.0 {
         return 0.0;
     }
-    let cap = MAX_PULL.min(dim);
+    let cap = tun.max_pull.min(dim);
     let y = (stretch.abs() / cap).min(0.999);
-    cap * y / (RB_STRETCH_C * (1.0 - y))
+    cap * y / (tun.rb_stretch_c * (1.0 - y))
 }
 
 /// Snap-back position over time, seeded with the stretch `x0` and velocity `v0`
 /// when the snap began. The same function serves a gentle release and a hard
 /// flick — only `v0` differs.
-fn rb_elastic(x0: f32, v0: f32, t: f32) -> f32 {
-    let damp = (-t * RB_STIFFNESS / RB_PERIOD).exp();
-    (x0 + (-v0 * t * RB_AMPLITUDE)) * damp
+fn rb_elastic(x0: f32, v0: f32, t: f32, tun: &ScrollTuning) -> f32 {
+    let damp = (-t * tun.rb_stiffness / tun.rb_period).exp();
+    (x0 + (-v0 * t * tun.rb_amplitude)) * damp
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -276,6 +372,12 @@ struct ScrollPhysics {
     stretch: f32,
     /// Fling velocity (px/s).
     velocity: f32,
+    /// Per-fling decay factor (velocity kept per ms), set at launch. Hard flicks
+    /// get a slower decay (longer τ) so they coast farther *without* launching
+    /// faster — the super-linearity lives here, not in the launch speed, so the
+    /// hand-off stays continuous and the momentum carried into an edge bounce is
+    /// the true finger speed (not an inflated launch).
+    fling_friction: f32,
     /// EMA of the per-frame velocity (`raw/dt`, px/s) while dragging — biased to
     /// the last frames so a flick seeds its fling from the speed *at lift*, not
     /// the gesture average. Seeds both the fling and the rubber-band bounce.
@@ -292,6 +394,8 @@ struct ScrollPhysics {
     content_h: f32,
     /// Low-pass-smoothed stretch actually rendered (the offset is direct).
     render_stretch: f32,
+    /// Feel knobs, refreshed from the shared [`ScrollTuning`] each frame.
+    tuning: ScrollTuning,
 }
 
 impl ScrollPhysics {
@@ -307,10 +411,10 @@ impl ScrollPhysics {
         self.pos -= delta;
         if self.pos < 0.0 {
             self.offset = 0.0;
-            self.stretch = rb_pull(-self.pos, dim);
+            self.stretch = rb_pull(-self.pos, dim, &self.tuning);
         } else if self.pos > max {
             self.offset = max;
-            self.stretch = -rb_pull(self.pos - max, dim);
+            self.stretch = -rb_pull(self.pos - max, dim, &self.tuning);
         } else {
             self.offset = self.pos;
             self.stretch = 0.0;
@@ -322,9 +426,12 @@ impl ScrollPhysics {
     /// stale carry-over); a continuing one converges toward the live speed in a
     /// few frames, so the value at lift reflects the *peak* of an accelerating
     /// flick rather than its average — the model the tuned momentum module uses.
-    fn track_velocity(&mut self, instant: f32) {
+    fn track_velocity(&mut self, instant: f32, dt: f32) {
         if self.state == ScrollState::Dragging {
-            self.vel_ema += (instant - self.vel_ema) * VEL_SMOOTHING;
+            // dt-aware EMA: averages `instant` over ~vel_tau seconds regardless
+            // of frame rate, so the seed velocity is FPS-independent.
+            let alpha = 1.0 - (-dt / self.tuning.vel_tau).exp();
+            self.vel_ema += (instant - self.vel_ema) * alpha;
         } else {
             self.vel_ema = instant;
         }
@@ -364,6 +471,9 @@ pub fn scroll_view<R>(
 ) -> R {
     let id = ui.make_persistent_id((id_salt, "kanso_scroll_view"));
     let mut sp: ScrollPhysics = ui.data_mut(|d| d.get_temp(id).unwrap_or_default());
+    // Refresh the feel knobs from the shared tuning each frame (defaults unless an
+    // app/the gallery sliders overrode them) so live edits apply immediately.
+    sp.tuning = scroll_tuning(ui.ctx());
     let now = ui.input(|i| i.time);
     let dt = ui.input(|i| i.stable_dt).min(0.1);
 
@@ -402,7 +512,7 @@ pub fn scroll_view<R>(
         } else {
             // Track velocity *before* flipping to Dragging so a fresh gesture
             // seeds from this frame's speed for a responsive flick.
-            sp.track_velocity(raw / dt);
+            sp.track_velocity(raw / dt, dt);
         }
         sp.pending += raw;
         sp.last_event = now;
@@ -410,10 +520,16 @@ pub fn scroll_view<R>(
     }
 
     // Drain the coarse raw burst into the position a fraction per frame so a slow
-    // drag glides. Not during a bounce (the snap owns the position); any
-    // remainder at lift simply drains into the fling, so there's no flush hitch.
-    if sp.state != ScrollState::Bouncing && sp.pending != 0.0 {
-        let alpha = 1.0 - (-dt / DRAG_SMOOTH_TAU).exp();
+    // drag glides. ONLY while actively dragging (gap ≤ COAST_GAP): once the
+    // gesture pauses we coast instead (below), and once a fling starts it must
+    // move purely at `velocity * dt`, with no stale pending draining on top
+    // (which adds a brief over-speed at the hand-off). The sub-pixel residual at
+    // lift is discarded below rather than folded into the fling.
+    if sp.state == ScrollState::Dragging
+        && (now - sp.last_event) as f32 <= sp.tuning.coast_gap
+        && sp.pending != 0.0
+    {
+        let alpha = 1.0 - (-dt / sp.tuning.drag_smooth_tau).exp();
         let release = if sp.pending.abs() < 0.5 {
             sp.pending
         } else {
@@ -430,12 +546,29 @@ pub fn scroll_view<R>(
         ScrollState::Dragging => {
             // No lift event reaches egui, so infer it from a gap in scroll
             // events, then bounce (released stretched), fling (thrown), or stop.
-            if (now - sp.last_event) as f32 > LIFT_GAP {
+            let gap = (now - sp.last_event) as f32;
+            if gap <= sp.tuning.lift_gap && gap > sp.tuning.coast_gap {
+                // Paused past the event cadence but not yet a confirmed lift:
+                // coast at the tracked velocity so the position never freezes,
+                // making the fling hand-off seamless (no velocity step / hitch).
+                sp.apply(sp.vel_ema * dt, dim);
+                ui.ctx().request_repaint();
+            }
+            if gap > sp.tuning.lift_gap {
                 let v = sp.vel_ema;
+                // Discard the sub-pixel pending residual so the fling starts clean.
+                sp.pending = 0.0;
+                // Super-linear *coast*: gentle flicks decay at the base τ, hard
+                // flicks decay slower (longer τ) so they travel farther — but the
+                // launch speed stays == the finger speed (continuous hand-off, and
+                // the velocity carried into an edge bounce is the true momentum).
+                let scale = sp.tuning.fling_scale
+                    + sp.tuning.fling_gain * (v.abs() - sp.tuning.fling_knee).max(0.0);
                 if sp.stretch != 0.0 {
                     sp.begin_bounce(now, v);
-                } else if v.abs() > FLING_MIN {
-                    sp.velocity = v * FLING_SCALE;
+                } else if v.abs() > sp.tuning.fling_min {
+                    sp.velocity = v;
+                    sp.fling_friction = sp.tuning.fling_friction.powf(1.0 / scale);
                     sp.state = ScrollState::Flinging;
                 } else {
                     sp.state = ScrollState::Idle;
@@ -443,19 +576,19 @@ pub fn scroll_view<R>(
             }
         }
         ScrollState::Flinging => {
-            sp.velocity *= FLING_FRICTION.powf(dt * 1000.0);
+            sp.velocity *= sp.fling_friction.powf(dt * 1000.0);
             sp.apply(sp.velocity * dt, dim);
             if sp.stretch != 0.0 {
                 // Momentum hit the wall — absorb the leftover velocity into the
                 // bounce (a hard flick bounces harder).
                 sp.begin_bounce(now, sp.velocity);
-            } else if sp.velocity.abs() < FLING_STOP {
+            } else if sp.velocity.abs() < sp.tuning.fling_stop {
                 sp.state = ScrollState::Idle;
             }
         }
         ScrollState::Bouncing => {
             let t = (now - sp.snap_start) as f32;
-            sp.stretch = rb_elastic(sp.snap_x0, sp.snap_v0, t);
+            sp.stretch = rb_elastic(sp.snap_x0, sp.snap_v0, t, &sp.tuning);
             if sp.stretch.abs() < 1.0 {
                 sp.stretch = 0.0;
                 sp.pos = sp.offset;
@@ -463,7 +596,7 @@ pub fn scroll_view<R>(
             } else {
                 // Keep the unclamped position consistent with the decaying
                 // stretch so a new drag resumes smoothly.
-                let excess = rb_pull_inverse(sp.stretch.abs(), dim);
+                let excess = rb_pull_inverse(sp.stretch.abs(), dim, &sp.tuning);
                 let max = sp.max_offset(dim);
                 sp.pos = if sp.stretch > 0.0 {
                     -excess
