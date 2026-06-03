@@ -32,6 +32,7 @@
 pub mod fonts;
 pub mod metrics;
 pub mod palette;
+pub mod scroll;
 pub mod theme;
 pub mod widgets;
 
