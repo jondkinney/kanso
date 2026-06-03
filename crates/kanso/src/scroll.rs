@@ -30,6 +30,16 @@ use std::hash::Hash;
 
 use egui::{Context, Id, Vec2};
 
+/// `true` while fingers rest on the touchpad — the macOS "touch to stop a
+/// momentum scroll" signal. Read from egui memory, where our forked egui-winit
+/// publishes the Wayland hold gesture (matches `egui_winit::HOLD_GESTURE_ID`).
+/// Without the fork the slot is never written, so this is simply always `false`
+/// — a graceful no-op, no dependency on the fork.
+fn hold_gesture_active(ctx: &Context) -> bool {
+    ctx.data(|d| d.get_temp::<bool>(Id::new("egui_hold_gesture_active")))
+        .unwrap_or(false)
+}
+
 /// Tuning for [`scroll_momentum_with`].
 #[derive(Clone, Copy, Debug)]
 pub struct MomentumConfig {
@@ -86,9 +96,13 @@ pub fn scroll_momentum_with(ctx: &Context, cfg: MomentumConfig) {
     let (raw, zooming) =
         ctx.input(|i| (i.raw_scroll_delta, i.modifiers.command || i.modifiers.ctrl));
 
+    // A touchpad hold (fingers resting) stops the coast dead — macOS "touch to
+    // stop". Treated like zooming: bleed all velocity and stay out of the way.
+    let held = hold_gesture_active(ctx);
+
     let Momentum { mut vel, mut idle } = ctx.data_mut(|d| d.get_temp(id).unwrap_or_default());
 
-    if zooming {
+    if zooming || held {
         vel = Vec2::ZERO;
         idle = 0.0;
     } else if raw.length() > ACTIVE_THRESHOLD {
@@ -364,6 +378,17 @@ pub fn scroll_view<R>(
     } else {
         0.0
     };
+
+    // A touchpad hold (fingers resting, no movement) stops the coast dead —
+    // macOS "touch to stop", surfaced by the forked egui-winit. This catches the
+    // zero-movement rest that emits no scroll event; the raw-delta interrupt
+    // below handles a re-touch that also moves a little.
+    if hold_gesture_active(ui.ctx()) && sp.state == ScrollState::Flinging {
+        sp.velocity = 0.0;
+        sp.vel_ema = 0.0;
+        sp.state = ScrollState::Idle;
+    }
+
     if raw != 0.0 {
         if matches!(sp.state, ScrollState::Flinging | ScrollState::Bouncing) {
             // Re-touching the trackpad mid-coast halts it dead (macOS-style):
