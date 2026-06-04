@@ -572,7 +572,10 @@ fn scroll_tuning_window(ctx: &egui::Context) {
         .default_pos([28.0, 96.0])
         .resizable(false)
         .show(ctx, |ui| {
-            ui.style_mut().spacing.slider_width = 180.0;
+            // Wide rail = a lot of travel per unit, so values are easy to dial in
+            // even across the roomy ranges (drag the rail, or double-click the
+            // number to type an exact value).
+            ui.style_mut().spacing.slider_width = 440.0;
             ui.label(
                 egui::RichText::new(
                     "Check a box to lock that value — Reset only touches unlocked rows.",
@@ -586,7 +589,7 @@ fn scroll_tuning_window(ctx: &egui::Context) {
             row(
                 ui,
                 &mut locks.fling_gain,
-                egui::Slider::new(&mut t.fling_gain, 0.0..=0.0015)
+                egui::Slider::new(&mut t.fling_gain, 0.0..=0.0025)
                     .custom_formatter(|v, _| format!("{v:.5}")),
                 "gain — top-end coast",
                 "The main top-end dial: how much farther hard flicks over-coast. \
@@ -599,7 +602,7 @@ fn scroll_tuning_window(ctx: &egui::Context) {
             row(
                 ui,
                 &mut locks.fling_friction,
-                egui::Slider::new(&mut tau, 0.4..=2.5),
+                egui::Slider::new(&mut tau, 0.15..=3.0),
                 "glide τ (s)",
                 "Overall glide length / floatiness — the base fling decay shown as a \
                  time constant (FLING_FRICTION). Longer τ keeps every coast gliding \
@@ -609,7 +612,7 @@ fn scroll_tuning_window(ctx: &egui::Context) {
             row(
                 ui,
                 &mut locks.fling_knee,
-                egui::Slider::new(&mut t.fling_knee, 200.0..=1000.0),
+                egui::Slider::new(&mut t.fling_knee, 50.0..=1200.0),
                 "super-linear knee",
                 "Flick speed (px/s) where the top-end boost begins. Below it flings \
                  coast ≈ 1:1 with your finger; above it the gain kicks in. Raise the \
@@ -618,7 +621,7 @@ fn scroll_tuning_window(ctx: &egui::Context) {
             row(
                 ui,
                 &mut locks.fling_min,
-                egui::Slider::new(&mut t.fling_min, 50.0..=800.0),
+                egui::Slider::new(&mut t.fling_min, 20.0..=600.0),
                 "fling min (mini-flick)",
                 "Minimum lift speed (px/s) that starts a fling. Lower so smaller quick \
                  flicks still coast; too low and a slow controlled scroll coasts when \
@@ -627,8 +630,9 @@ fn scroll_tuning_window(ctx: &egui::Context) {
             row(
                 ui,
                 &mut locks.vel_tau,
-                egui::Slider::new(&mut t.vel_tau, 0.004..=0.030)
-                    .custom_formatter(|v, _| format!("{v:.3}")),
+                egui::Slider::new(&mut t.vel_tau, 0.002..=0.040)
+                    .logarithmic(true)
+                    .custom_formatter(|v, _| format!("{v:.4}")),
                 "vel τ (seed window)",
                 "Velocity-seed averaging window (s). Smaller captures the sharp peak of \
                  a fast flick (punchier, twitchier); larger averages more (smoother, but \
@@ -640,7 +644,7 @@ fn scroll_tuning_window(ctx: &egui::Context) {
             row(
                 ui,
                 &mut locks.rb_amplitude,
-                egui::Slider::new(&mut t.rb_amplitude, 0.2..=3.0),
+                egui::Slider::new(&mut t.rb_amplitude, 0.2..=8.0),
                 "amplitude — shoot/far",
                 "How fast AND far the edge bounce throws — sets both the initial \
                  shoot-in velocity (∝ v·A) and the peak travel. Raise to make the \
@@ -649,7 +653,7 @@ fn scroll_tuning_window(ctx: &egui::Context) {
             row(
                 ui,
                 &mut locks.rb_period,
-                egui::Slider::new(&mut t.rb_period, 0.6..=2.5),
+                egui::Slider::new(&mut t.rb_period, 0.4..=3.5),
                 "period — snap speed",
                 "Bounce timing: peak at t* = period/stiffness, settle in ~4·t*. Lower = \
                  snappier (reaches peak and springs back quicker); higher = a larger, \
@@ -658,7 +662,7 @@ fn scroll_tuning_window(ctx: &egui::Context) {
             row(
                 ui,
                 &mut locks.max_pull,
-                egui::Slider::new(&mut t.max_pull, 20.0..=150.0),
+                egui::Slider::new(&mut t.max_pull, 10.0..=200.0),
                 "manual pull cap (px)",
                 "Slow-drag overscroll asymptote — how far a deliberate pull past the \
                  edge can stretch (approached but never quite reached). Independent of \
