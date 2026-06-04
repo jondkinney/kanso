@@ -191,10 +191,10 @@ const RB_STRETCH_C: f32 = 0.55;
 /// at a fixed ~screenful-independent distance. Only caps the manual pull — the
 /// flick bounce is velocity-driven (`rb_elastic`) and can still exceed this.
 const MAX_PULL: f32 = 50.0;
-/// Base fling friction: fraction of velocity kept per millisecond. `0.9975` ≈ a
-/// 0.4 s exponential time-constant — the *base* coast; hard flicks stretch this τ
-/// via `FLING_GAIN` (super-linear coast). Set on a trackpad against macOS.
-const FLING_FRICTION: f32 = 0.9975;
+/// Base fling friction: fraction of velocity kept per millisecond. `0.99575` ≈ a
+/// 0.235 s exponential time-constant — the *base* coast; hard flicks stretch this
+/// τ via `FLING_GAIN` (super-linear coast). Set on a trackpad against macOS.
+const FLING_FRICTION: f32 = 0.99575;
 /// Low-pass time constant (s) for the *rendered* offset/stretch — stands in for
 /// the egui scroll smoothing we bypassed, so direct scrolling reads smoothly
 /// instead of stepping per raw delta. Small enough not to feel laggy.
@@ -206,7 +206,7 @@ const SCROLL_RENDER_TAU: f32 = 0.03;
 /// build feel identical. Larger = smoother/slower seed; smaller = peakier/faster.
 /// Tune against a RELEASE build (that's what ships), e.g.
 /// `cargo run --release --example gallery`.
-const VEL_TAU: f32 = 0.004;
+const VEL_TAU: f32 = 0.002;
 /// Time constant (s) for spreading a coarse raw scroll burst across frames so a
 /// slow drag glides instead of jumping. Small enough that the lag is negligible
 /// at flick speed; large enough to de-chunk a slow scroll.
@@ -220,14 +220,14 @@ const FLING_SCALE: f32 = 1.0;
 /// `FLING_FRICTION^(1/scale)` — a longer τ for hard flicks, so the coast is
 /// *super-linear* in flick speed (macOS-style) without inflating the launch
 /// (which keeps the edge bounce honest). The top-end dial.
-const FLING_GAIN: f32 = 0.0005;
+const FLING_GAIN: f32 = 0.001;
 /// Flick speed (px/s) below which the coast stays at the base τ; above it the
 /// super-linear τ stretch kicks in, so gentle scrolling is unaffected.
-const FLING_KNEE: f32 = 200.0;
+const FLING_KNEE: f32 = 50.0;
 /// Minimum lift speed (px/s) to start a fling. Above deliberate slow-scroll
 /// release speeds so a controlled scroll just stops where you lift, but low
 /// enough that a quick *small* flick still coasts.
-const FLING_MIN: f32 = 100.0;
+const FLING_MIN: f32 = 50.0;
 /// A fling settles (stops) below this speed (px/s).
 const FLING_STOP: f32 = 20.0;
 /// No scroll event for this long (s) is taken as "fingers lifted" — egui drops
@@ -511,8 +511,15 @@ pub fn scroll_view<R>(
             sp.vel_ema = 0.0;
         } else {
             // Track velocity *before* flipping to Dragging so a fresh gesture
-            // seeds from this frame's speed for a responsive flick.
-            sp.track_velocity(raw / dt, dt);
+            // seeds from this frame's speed for a responsive flick. Seed from the
+            // time since the LAST scroll event, NOT the frame dt: when the render
+            // rate outruns the event rate (e.g. vsync off → 1000+ fps), the frame
+            // dt shrinks far below the ~8 ms between trackpad events, and `raw/dt`
+            // would over-read the speed by that ratio. The inter-event interval is
+            // the true span this `raw` delta covers, so the seed is correct at any
+            // fps. Clamp out the idle gap before a fresh gesture (and div-by-zero).
+            let event_dt = ((now - sp.last_event) as f32).clamp(1.0 / 1000.0, 0.05);
+            sp.track_velocity(raw / event_dt, event_dt);
         }
         sp.pending += raw;
         sp.last_event = now;
