@@ -40,6 +40,31 @@ fn hold_gesture_active(ctx: &Context) -> bool {
         .unwrap_or(false)
 }
 
+/// `true` when this frame's scroll input is coming from a **mouse wheel**
+/// (discrete `Line`/`Page` steps) rather than a **trackpad** (pixel-precise
+/// `Point` deltas). winit maps a notched *or* free-spinning ("kinetic") mouse
+/// wheel to `MouseScrollDelta::LineDelta` and a two-finger trackpad scroll to
+/// `PixelDelta`, which egui surfaces as the [`egui::MouseWheelUnit`].
+///
+/// The kinetic momentum + rubber-band over-scroll in this module is a trackpad
+/// affordance — native toolkits (macOS, GTK) only ever coast/over-scroll the
+/// trackpad, never the wheel. So both the momentum coast and the owned-offset
+/// fling are gated on this returning `false`: a wheel scrolls plainly, and a
+/// free-spinning wheel can never pin an over-scroll while it's still turning.
+fn scroll_is_wheel(ctx: &Context) -> bool {
+    ctx.input(|i| {
+        i.events.iter().any(|e| {
+            matches!(
+                e,
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Line | egui::MouseWheelUnit::Page,
+                    ..
+                }
+            )
+        })
+    })
+}
+
 /// Tuning for [`scroll_momentum_with`].
 #[derive(Clone, Copy, Debug)]
 pub struct MomentumConfig {
@@ -100,9 +125,15 @@ pub fn scroll_momentum_with(ctx: &Context, cfg: MomentumConfig) {
     // stop". Treated like zooming: bleed all velocity and stay out of the way.
     let held = hold_gesture_active(ctx);
 
+    // A mouse wheel never coasts (kinetic is trackpad-only; see
+    // `scroll_is_wheel`). egui still applies the wheel's raw delta this frame
+    // via its own smoothing, so wheel scrolling keeps working — it just gets no
+    // momentum tail bolted on.
+    let wheel = scroll_is_wheel(ctx);
+
     let Momentum { mut vel, mut idle } = ctx.data_mut(|d| d.get_temp(id).unwrap_or_default());
 
-    if zooming || held {
+    if zooming || held || wheel {
         vel = Vec2::ZERO;
         idle = 0.0;
     } else if raw.length() > ACTIVE_THRESHOLD {
@@ -507,7 +538,24 @@ pub fn scroll_view<R>(
         sp.state = ScrollState::Idle;
     }
 
-    if raw != 0.0 {
+    // A mouse wheel bypasses the whole fling/rubber-band controller: it steps
+    // the offset directly and clamps hard at the edges, so a free-spinning
+    // ("kinetic") wheel never pins an over-scroll while it's still turning. The
+    // kinetic physics below is trackpad-only (see `scroll_is_wheel`). `raw` is
+    // already in points (egui scales the wheel's line delta by
+    // `line_scroll_speed`), so it applies directly.
+    let wheel = scroll_is_wheel(ui.ctx());
+    if raw != 0.0 && wheel {
+        sp.velocity = 0.0;
+        sp.vel_ema = 0.0;
+        sp.pending = 0.0;
+        sp.stretch = 0.0;
+        let max = sp.max_offset(dim);
+        sp.offset = (sp.offset - raw).clamp(0.0, max);
+        sp.pos = sp.offset;
+        sp.state = ScrollState::Idle;
+        sp.last_event = now;
+    } else if raw != 0.0 {
         if matches!(sp.state, ScrollState::Flinging | ScrollState::Bouncing) {
             // Re-touching the trackpad mid-coast halts it dead (macOS-style):
             // flipping to Dragging stops the fling, and dropping this contact
