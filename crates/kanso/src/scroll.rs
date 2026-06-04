@@ -191,10 +191,10 @@ const RB_STRETCH_C: f32 = 0.55;
 /// at a fixed ~screenful-independent distance. Only caps the manual pull — the
 /// flick bounce is velocity-driven (`rb_elastic`) and can still exceed this.
 const MAX_PULL: f32 = 50.0;
-/// Base fling friction: fraction of velocity kept per millisecond. `0.99575` ≈ a
-/// 0.235 s exponential time-constant — the *base* coast; hard flicks stretch this
+/// Base fling friction: fraction of velocity kept per millisecond. `0.99601` ≈ a
+/// 0.25 s exponential time-constant — the *base* coast; hard flicks stretch this
 /// τ via `FLING_GAIN` (super-linear coast). Set on a trackpad against macOS.
-const FLING_FRICTION: f32 = 0.99575;
+const FLING_FRICTION: f32 = 0.99601;
 /// Low-pass time constant (s) for the *rendered* offset/stretch — stands in for
 /// the egui scroll smoothing we bypassed, so direct scrolling reads smoothly
 /// instead of stepping per raw delta. Small enough not to feel laggy.
@@ -220,7 +220,7 @@ const FLING_SCALE: f32 = 1.0;
 /// `FLING_FRICTION^(1/scale)` — a longer τ for hard flicks, so the coast is
 /// *super-linear* in flick speed (macOS-style) without inflating the launch
 /// (which keeps the edge bounce honest). The top-end dial.
-const FLING_GAIN: f32 = 0.001;
+const FLING_GAIN: f32 = 0.002;
 /// Flick speed (px/s) below which the coast stays at the base τ; above it the
 /// super-linear τ stretch kicks in, so gentle scrolling is unaffected.
 const FLING_KNEE: f32 = 50.0;
@@ -409,6 +409,14 @@ impl ScrollPhysics {
     fn apply(&mut self, delta: f32, dim: f32) {
         let max = self.max_offset(dim);
         self.pos -= delta;
+        // Bound the over-scroll excess. The rubber-band stretch saturates near
+        // `cap`, but `pos` would otherwise accumulate without limit under a hard
+        // push — and then reversing has to claw all of it back before the content
+        // moves (it "sticks"). Cap the excess at ~the saturation point.
+        let cap = self.tuning.max_pull.min(dim);
+        if cap > 0.0 {
+            self.pos = self.pos.clamp(-20.0 * cap, max + 20.0 * cap);
+        }
         if self.pos < 0.0 {
             self.offset = 0.0;
             self.stretch = rb_pull(-self.pos, dim, &self.tuning);
@@ -571,12 +579,32 @@ pub fn scroll_view<R>(
                 // the velocity carried into an edge bounce is the true momentum).
                 let scale = sp.tuning.fling_scale
                     + sp.tuning.fling_gain * (v.abs() - sp.tuning.fling_knee).max(0.0);
-                if sp.stretch != 0.0 {
-                    sp.begin_bounce(now, v);
-                } else if v.abs() > sp.tuning.fling_min {
+                // A flick *away* from a stretched edge (e.g. over-scrolled at the
+                // bottom, then thrown up) should fling off the edge: the fling's
+                // apply() releases the over-scroll gradually and then coasts. Only
+                // bounce when there's no real throw, or the throw is *into* the
+                // edge (deepening it) — a bounce seeded with an away velocity just
+                // springs back to the edge instead of carrying on.
+                let away_flick = sp.stretch != 0.0 && sp.stretch * v < 0.0;
+                let fling = (sp.stretch == 0.0 || away_flick) && v.abs() > sp.tuning.fling_min;
+                if fling {
+                    if sp.stretch != 0.0 {
+                        // Flinging away from an over-scroll: release it instantly
+                        // (snap pos to the edge) so the throw coasts off the edge
+                        // right away; the visible stretch springs back smoothly via
+                        // render_stretch rather than gating the coast.
+                        sp.pos = if sp.stretch < 0.0 {
+                            sp.max_offset(dim)
+                        } else {
+                            0.0
+                        };
+                        sp.offset = sp.pos;
+                    }
                     sp.velocity = v;
                     sp.fling_friction = sp.tuning.fling_friction.powf(1.0 / scale);
                     sp.state = ScrollState::Flinging;
+                } else if sp.stretch != 0.0 {
+                    sp.begin_bounce(now, v);
                 } else {
                     sp.state = ScrollState::Idle;
                 }
@@ -585,9 +613,15 @@ pub fn scroll_view<R>(
         ScrollState::Flinging => {
             sp.velocity *= sp.fling_friction.powf(dt * 1000.0);
             sp.apply(sp.velocity * dt, dim);
-            if sp.stretch != 0.0 {
-                // Momentum hit the wall — absorb the leftover velocity into the
-                // bounce (a hard flick bounces harder).
+            // Bounce only when the fling drives *into* a wall (deepening the
+            // stretch — a hard flick bounces harder), or when it stalls while
+            // still over-scrolled (spring the residual back). A fling that *exits*
+            // an over-scroll (stretch and velocity opposing) keeps coasting so it
+            // releases the edge instead of re-bouncing off it.
+            let into_edge = sp.stretch != 0.0 && sp.stretch * sp.velocity > 0.0;
+            let stalled_overscrolled =
+                sp.stretch != 0.0 && sp.velocity.abs() < sp.tuning.fling_stop;
+            if into_edge || stalled_overscrolled {
                 sp.begin_bounce(now, sp.velocity);
             } else if sp.velocity.abs() < sp.tuning.fling_stop {
                 sp.state = ScrollState::Idle;
@@ -596,6 +630,16 @@ pub fn scroll_view<R>(
         ScrollState::Bouncing => {
             let t = (now - sp.snap_start) as f32;
             sp.stretch = rb_elastic(sp.snap_x0, sp.snap_v0, t, &sp.tuning);
+            // A release whose velocity points *away* from the stretched edge can
+            // drive rb_elastic across zero (the `v·t` term overpowering `x0`).
+            // Clamp it to the edge it started on: a rubber-band only springs back
+            // toward its own edge, never to the far one — letting it cross flips
+            // the pos reconciliation below and teleports the view to the far edge.
+            sp.stretch = if sp.snap_x0 >= 0.0 {
+                sp.stretch.max(0.0)
+            } else {
+                sp.stretch.min(0.0)
+            };
             if sp.stretch.abs() < 1.0 {
                 sp.stretch = 0.0;
                 sp.pos = sp.offset;
