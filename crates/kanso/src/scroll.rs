@@ -40,6 +40,45 @@ fn hold_gesture_active(ctx: &Context) -> bool {
         .unwrap_or(false)
 }
 
+/// The macOS trackpad scroll phase, distinguishing a finger-driven gesture from
+/// the OS momentum coast that follows the lift. Read from egui memory, where our
+/// forked egui-winit publishes it as a `u8` (matches `egui_winit::SCROLL_PHASE_ID`).
+///
+/// macOS reports the gesture and its momentum coast as two parallel phase
+/// tracks, but upstream winit/egui-winit collapse them into a single
+/// `MouseWheel` event — so a controller can't tell a real gesture delta from a
+/// momentum delta, nor see the precise lift. That's exactly what makes the
+/// gap-based lift inference (used on Linux) *pin* a flick on macOS: the OS keeps
+/// streaming momentum events after the lift, the event gap never appears, and
+/// the tracked velocity has bled to ~0 by the time it does. With the phase we
+/// fling off the real lift and drop the momentum deltas instead.
+///
+/// `None` when the slot was never written — Linux/Wayland and any non-fork
+/// build — so [`scroll_view`] falls back to the gap inference, unchanged. No
+/// dependency on the fork.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum MacScrollPhase {
+    /// Fingers on the trackpad, actively scrolling. Apply + track velocity.
+    Gesture,
+    /// Fingers lifted: the precise end of the gesture. Launch the fling now.
+    GestureEnded,
+    /// OS momentum coast after the lift. Drop these deltas — the synthesised
+    /// fling replaces them.
+    Momentum,
+    /// The momentum coast finished.
+    MomentumEnded,
+}
+
+fn macos_scroll_phase(ctx: &Context) -> Option<MacScrollPhase> {
+    match ctx.data(|d| d.get_temp::<u8>(Id::new("egui_scroll_phase"))) {
+        Some(1) => Some(MacScrollPhase::Gesture),
+        Some(2) => Some(MacScrollPhase::GestureEnded),
+        Some(3) => Some(MacScrollPhase::Momentum),
+        Some(4) => Some(MacScrollPhase::MomentumEnded),
+        _ => None,
+    }
+}
+
 /// `true` when this frame's scroll input is coming from a **mouse wheel**
 /// (discrete `Line`/`Page` steps) rather than a **trackpad** (pixel-precise
 /// `Point` deltas). winit maps a notched *or* free-spinning ("kinetic") mouse
@@ -522,17 +561,55 @@ pub fn scroll_view<R>(
     // Input — driven by the RAW delta (egui's smoothing would fight the
     // physics), and only while the pointer is over the viewport.
     let hovering = ui.rect_contains_pointer(viewport);
-    let raw = if hovering {
+
+    // macOS trackpad scroll phase (our forked egui-winit publishes it; `None`
+    // on Linux/Wayland and any non-fork build). It lets us fling off the *exact*
+    // finger lift and ignore the OS momentum coast that follows it, instead of
+    // inferring the lift from a gap in events — see `macos_scroll_phase`.
+    //
+    // The slot is STICKY: egui memory holds the last phase until the next scroll
+    // event overwrites it, so on event-free frames `phase` is stale. Both uses
+    // below stay correct anyway — the momentum drop only fires when there's a
+    // delta to drop (`raw != 0`) and isn't a wheel, and the lift only acts in
+    // `Dragging` (after it fires, the state leaves `Dragging`, so a re-read is a
+    // no-op). Event delivery precedes the egui frame, so a fresh gesture's first
+    // delta and its phase land together and overwrite any stale value.
+    let phase = macos_scroll_phase(ui.ctx());
+    let wheel = scroll_is_wheel(ui.ctx());
+
+    // Drop the OS momentum coast: our synthesised fling *replaces* it, so
+    // applying both would stack velocity — and a momentum delta arriving
+    // mid-fling would also trip the re-touch interrupt below and kill the fling
+    // (the two reasons a flick pins on macOS). A mouse wheel reports no phase,
+    // so a stale `Momentum`/`MomentumEnded` slot left from an earlier trackpad
+    // coast must not suppress it — hence the `!wheel` guard.
+    let drop_momentum = !wheel
+        && matches!(
+            phase,
+            Some(MacScrollPhase::Momentum | MacScrollPhase::MomentumEnded)
+        );
+    // The precise finger lift: launch the fling this frame rather than waiting
+    // for the (never-arriving, on macOS) event gap. Acted on only in `Dragging`,
+    // so re-reading a sticky `GestureEnded` once the fling has started is a no-op.
+    let lift_now = matches!(phase, Some(MacScrollPhase::GestureEnded));
+
+    let raw = if hovering && !drop_momentum {
         ui.input(|i| i.raw_scroll_delta.y)
     } else {
         0.0
     };
 
-    // A touchpad hold (fingers resting, no movement) stops the coast dead —
-    // macOS "touch to stop", surfaced by the forked egui-winit. This catches the
-    // zero-movement rest that emits no scroll event; the raw-delta interrupt
-    // below handles a re-touch that also moves a little.
-    if hold_gesture_active(ui.ctx()) && sp.state == ScrollState::Flinging {
+    // A finger-rest on the trackpad (fingers down, no movement) stops the coast
+    // dead — the native "rest to stop". Two sources, both a no-movement touch:
+    // the Wayland hold gesture (surfaced by the forked egui-winit), and on macOS
+    // a `Gesture` scroll phase carrying no delta — touching the trackpad emits a
+    // MayBegin/Began phase event with zero movement, the only signal a pure rest
+    // produces. A re-touch that also MOVES (`raw != 0`) is handled by the
+    // raw-delta interrupt below, which deliberately doesn't re-seed velocity from
+    // the contact frame, so a quick tap-to-stop can't immediately re-fling.
+    let resting_touch = hold_gesture_active(ui.ctx())
+        || (raw == 0.0 && matches!(phase, Some(MacScrollPhase::Gesture)));
+    if resting_touch && sp.state == ScrollState::Flinging {
         sp.velocity = 0.0;
         sp.vel_ema = 0.0;
         sp.state = ScrollState::Idle;
@@ -544,7 +621,6 @@ pub fn scroll_view<R>(
     // kinetic physics below is trackpad-only (see `scroll_is_wheel`). `raw` is
     // already in points (egui scales the wheel's line delta by
     // `line_scroll_speed`), so it applies directly.
-    let wheel = scroll_is_wheel(ui.ctx());
     if raw != 0.0 && wheel {
         sp.velocity = 0.0;
         sp.vel_ema = 0.0;
@@ -607,17 +683,19 @@ pub fn scroll_view<R>(
 
     match sp.state {
         ScrollState::Dragging => {
-            // No lift event reaches egui, so infer it from a gap in scroll
-            // events, then bounce (released stretched), fling (thrown), or stop.
+            // The lift: on macOS `lift_now` is the exact finger-up (the phase
+            // signal); elsewhere no lift event reaches egui, so infer it from a
+            // gap in scroll events. Either way, then bounce (released stretched),
+            // fling (thrown), or stop.
             let gap = (now - sp.last_event) as f32;
-            if gap <= sp.tuning.lift_gap && gap > sp.tuning.coast_gap {
+            if !lift_now && gap <= sp.tuning.lift_gap && gap > sp.tuning.coast_gap {
                 // Paused past the event cadence but not yet a confirmed lift:
                 // coast at the tracked velocity so the position never freezes,
                 // making the fling hand-off seamless (no velocity step / hitch).
                 sp.apply(sp.vel_ema * dt, dim);
                 ui.ctx().request_repaint();
             }
-            if gap > sp.tuning.lift_gap {
+            if lift_now || gap > sp.tuning.lift_gap {
                 let v = sp.vel_ema;
                 // Discard the sub-pixel pending residual so the fling starts clean.
                 sp.pending = 0.0;
